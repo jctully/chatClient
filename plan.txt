@@ -1,0 +1,8 @@
+Joseph Tully
+Jared Jacobson
+
+1. For this assignment we are making a chat application that supports both public and private messages. This program requires two types of clients - the observer, which only receives messages, and the participant, who sends messages. The server needs to support up to 255 of each of these types of clients, as well as supporting users joining and quitting chat, making a username, and differentiating between public and private messages.
+
+2. The most challenging aspect we anticipate is probably negatiating with so many clients, which we will probably use an array to keep track of. Also, implementing non blocking receives so that the code can continuously look for new input without hanging on one client. Finally, figuring out how to manage the sending of private messages may prove difficult, but hopefully as our program progresses this will become clear.
+
+3. If we get stuck on something, we plan to get help from web sources such as stackexchange, which proved helpful in previous assignments. We can also get help from the professor if we get really stuck. A last source of help could be man pages for c functions, especially if we are using methods we are not familiar with. 
