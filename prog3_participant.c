@@ -23,6 +23,15 @@
 *
 *------------------------------------------------------------------------
 */
+
+char* blockingRead(int sd, char* buffer, int length) {
+	int n =  recv(sd, buffer, length, 0);
+	while (n < length) {
+		n +=  recv(sd, buffer, length - n, 0);
+	}
+	return buffer;
+}
+
 int main( int argc, char **argv) {
 	struct hostent *ptrh; /* pointer to a host table entry */
 	struct protoent *ptrp; /* pointer to a protocol table entry */
@@ -92,4 +101,3 @@ int main( int argc, char **argv) {
 
 	exit(EXIT_SUCCESS);
 }
-

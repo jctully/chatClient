@@ -1,6 +1,6 @@
 /* demo_server.c - code for example server program that uses TCP */
 
-#include <sys/types.h> 
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
@@ -28,6 +28,14 @@ int visits = 0; /* counts client connections */
 *------------------------------------------------------------------------
 */
 
+char* blockingRead(int sd, char* buffer, int length) {
+	int n =  recv(sd, buffer, length, 0);
+	while (n < length) {
+		n +=  recv(sd, buffer, length - n, 0);
+	}
+	return buffer;
+}
+
 int main(int argc, char **argv) {
 	struct protoent *ptrp; /* pointer to a protocol table entry */
 	struct sockaddr_in sad; /* structure to hold server's address */
@@ -49,10 +57,10 @@ int main(int argc, char **argv) {
 
 	//TODO: Set socket family to AF_INET
 	sad.sin_family = AF_INET;
-	
+
 	//TODO: Set local IP address to listen to all IP addresses this server can assume. You can do it by using INADDR_ANY
 	sad.sin_addr.s_addr = INADDR_ANY;
-     
+
 	port = atoi(argv[1]); /* convert argument to binary */
 	if (port > 0) { /* test for illegal value */
 		//TODO: set port number. The data type is u_short
@@ -107,4 +115,3 @@ int main(int argc, char **argv) {
 		close(sd2);
 	}
 }
-
