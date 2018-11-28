@@ -8,9 +8,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/ioctl.h>
 
 #define QLEN 6 /* size of request queue */
-int visits = 0; /* counts client connections */
+int numParticipants = 0; /* counts client connections */
 
 /*------------------------------------------------------------------------
 * Program: demo_server
@@ -28,12 +29,22 @@ int visits = 0; /* counts client connections */
 *------------------------------------------------------------------------
 */
 
-char* blockingRead(int sd, char* buffer, int length) {
+void fullRead(int sd, char* buffer, int length) {
+	int m;
 	int n =  recv(sd, buffer, length, 0);
-	while (n < length) {
-		n +=  recv(sd, buffer, length - n, 0);
+	if (n<0) {
+		perror("recv");
+		exit(EXIT_FAILURE);
 	}
-	return buffer;
+	while (n < length) {
+		m =  recv(sd, buffer, length - n, 0);
+		if (m<0) {
+			perror("recv");
+			exit(EXIT_FAILURE);
+		}
+		n += m;
+	}
+	buffer[length] = '\0';
 }
 
 int main(int argc, char **argv) {
@@ -45,13 +56,25 @@ int main(int argc, char **argv) {
 	int alen; /* length of address */
 	int optval = 1; /* boolean value when we set socket option */
 	char buf[1000]; /* buffer for string the server sends */
+	int MAX_PARTICIPANTS = 255;
+	char n = 'N', y = 'Y';
+	char username[10];
+	uint8_t length;
+	int rv, sock;
+	int on = 1;
 
-	if( argc != 2 ) {
+	fd_set readfds;
+	FD_ZERO(&readfds);
+
+	if( argc != 3 ) {
 		fprintf(stderr,"Error: Wrong number of arguments\n");
 		fprintf(stderr,"usage:\n");
-		fprintf(stderr,"./server server_port\n");
+		fprintf(stderr,"./server participant_port observer_port\n");
 		exit(EXIT_FAILURE);
 	}
+
+	int pPort = atoi(argv[1]);
+	int oPort = atoi(argv[2]);
 
 	memset((char *)&sad,0,sizeof(sad)); /* clear sockaddr structure */
 
@@ -83,11 +106,19 @@ int main(int argc, char **argv) {
 		fprintf(stderr, "Error: Socket creation failed\n");
 		exit(EXIT_FAILURE);
 	}
+	FD_SET(sd, &readfds);
 
 	/* Allow reuse of port - avoid "Bind failed" issues */
 	if( setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0 ) {
 		fprintf(stderr, "Error Setting socket option failed\n");
 		exit(EXIT_FAILURE);
+	}
+	rv = ioctl(sd, FIONBIO, (char *)&on);
+	if (rv < 0)
+	{
+	  perror("ioctl() failed");
+	  close(sd);
+	  exit(EXIT_FAILURE);
 	}
 
 	/* TODO: Bind a local address to the socket. For this, you need to pass correct parameters to the bind function. */
@@ -103,15 +134,38 @@ int main(int argc, char **argv) {
 	}
 
 	/* Main server loop - accept and handle requests */
+	sock = sd+1;
 	while (1) {
 		alen = sizeof(cad);
+		printf("before select\n");
+		rv = select(sock, &readfds, NULL, NULL, NULL);
+		if (rv == -1) {
+				perror("select"); // error occurred in select()
+		}
+		printf("after select\n");
 		if ((sd2 = accept(sd, (struct sockaddr *)&cad, &alen)) < 0) {
-			fprintf(stderr, "Error: Accept failed\n");
+			perror("accept");
 			exit(EXIT_FAILURE);
 		}
-		visits++;
-		sprintf(buf,"This server has been contacted %d time%s\n",visits,visits==1?".":"s.");
-		send(sd2, buf, strlen(buf),0);
+		FD_SET(sd2, &readfds);
+		sock = sd2+1;
+
+		numParticipants++;
+		if (numParticipants > MAX_PARTICIPANTS) {
+			send(sd2, &n, 1, 0);
+			close(sd2);
+			numParticipants--;
+		}
+
+		send(sd2, &y, 1, 0);
+		fullRead(sd2, &length, 1);
+		fullRead(sd2, username, length);
+		//validate username
+
+		printf("username: %s\n", username);
+
+
+
 		close(sd2);
 	}
 }

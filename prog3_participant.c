@@ -10,6 +10,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <sys/ioctl.h>
+#include <errno.h>
+
 
 /*------------------------------------------------------------------------
 * Program: demo_client
@@ -24,12 +27,22 @@
 *------------------------------------------------------------------------
 */
 
-char* blockingRead(int sd, char* buffer, int length) {
+void fullRead(int sd, char* buffer, int length) {
+	int m;
 	int n =  recv(sd, buffer, length, 0);
-	while (n < length) {
-		n +=  recv(sd, buffer, length - n, 0);
+	if (n<0) {
+		perror("recv");
+		exit(EXIT_FAILURE);
 	}
-	return buffer;
+	while (n < length) {
+		m =  recv(sd, buffer, length - n, 0);
+		if (m<0) {
+			perror("recv");
+			exit(EXIT_FAILURE);
+		}
+		n += m;
+	}
+	buffer[length] = '\0';
 }
 
 int main( int argc, char **argv) {
@@ -41,6 +54,15 @@ int main( int argc, char **argv) {
 	char *host; /* pointer to host name */
 	int n; /* number of characters read */
 	char buf[1000]; /* buffer for data from the server */
+	uint8_t length;
+	char username[10];
+	char letter;
+	int on = 1;
+	int sock;
+	int rv;
+
+	fd_set readfds;
+	FD_ZERO(&readfds);
 
 	memset((char *)&sad,0,sizeof(sad)); /* clear sockaddr structure */
 	sad.sin_family = AF_INET; /* set family to Internet */
@@ -83,19 +105,46 @@ int main( int argc, char **argv) {
 		fprintf(stderr, "Error: Socket creation failed\n");
 		exit(EXIT_FAILURE);
 	}
+	rv = ioctl(sd, FIONBIO, (char *)&on);
+	if (rv < 0)
+	{
+	  perror("ioctl() failed");
+	  close(sd);
+	  exit(EXIT_FAILURE);
+	}
+
+	FD_SET(sd, &readfds);
+	sock = sd+1;
+
 
 	/* TODO: Connect the socket to the specified server. You have to pass correct parameters to the connect function.*/
 	if (connect(sd, (struct sockaddr*) &sad, sizeof(sad)) < 0) {
-		fprintf(stderr,"connect failed\n");
-		exit(EXIT_FAILURE);
+		if (errno != EINPROGRESS) {
+			perror("connect");
+			exit(EXIT_FAILURE);
+		}
 	}
 
 	/* Repeatedly read data from socket and write to user's screen. */
-	n = recv(sd, buf, sizeof(buf), 0);
-	while (n > 0) {
-		write(1,buf,n);
-		n = recv(sd, buf, sizeof(buf), 0);
+	rv = select(sock, &readfds, NULL, NULL, NULL);
+	if (rv == -1) {
+			perror("select"); // error occurred in select()
 	}
+
+	fullRead(sd, &letter, 1);
+	if (letter == 'Y') {
+		//prompt input
+		printf("Enter your username: ");
+		fgets(username, 10, stdin);
+		printf("\n");
+		//validate name, timer
+		length = strlen(username);
+		send(sd, &length, 1, 0);
+		send(sd, username, length, 0);
+		printf("username sent\n");
+
+	}
+
 
 	close(sd);
 
