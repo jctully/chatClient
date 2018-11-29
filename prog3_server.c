@@ -10,6 +10,12 @@
 #include <unistd.h>
 #include <sys/ioctl.h>
 
+struct Trie *getNewTrieNode();
+void insert(struct Trie **head, char *str);
+int search(struct Trie *head, char *str);
+int haveChildren(struct Trie *curr);
+int deletion(struct Trie **curr, char *str);
+
 #define QLEN 6 /* size of request queue */
 int numParticipants = 0; /* counts client connections */
 
@@ -57,14 +63,18 @@ int main(int argc, char **argv) {
 	int optval = 1; /* boolean value when we set socket option */
 	char buf[1000]; /* buffer for string the server sends */
 	int MAX_PARTICIPANTS = 255;
-	char n = 'N', y = 'Y';
+	char n = 'N', y = 'Y', t='T', invalid = 'I';
 	char username[10];
 	uint8_t length;
 	int rv, sock;
 	int on = 1;
+	struct Trie *activeUsers;
+
 
 	fd_set readfds;
 	FD_ZERO(&readfds);
+
+	activeUsers = getNewTrieNode();
 
 	if( argc != 3 ) {
 		fprintf(stderr,"Error: Wrong number of arguments\n");
@@ -158,11 +168,29 @@ int main(int argc, char **argv) {
 		}
 
 		send(sd2, &y, 1, 0);
-		fullRead(sd2, &length, 1);
-		fullRead(sd2, username, length);
-		//validate username
+		int validName = 0;
+		while (validName == 0) {
+			fullRead(sd2, &length, 1);
+			fullRead(sd2, username, length);
+			//validate username
+			printf("here\n");
 
+			rv = search(activeUsers, username);
+			printf("after here\n");
+
+			if (rv == 1) {
+
+				send(sd2, &t, 1, 0);
+			}
+			else {
+
+				validName = 1;
+				send(sd2, &y, 1, 0);
+			}
+		}
 		printf("username: %s\n", username);
+		insert(&activeUsers, username);
+
 
 
 
