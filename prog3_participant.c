@@ -54,8 +54,9 @@ int main( int argc, char **argv) {
 	char *host; /* pointer to host name */
 	int n; /* number of characters read */
 	char buf[1000]; /* buffer for data from the server */
-	uint8_t length;
-	char username[10];
+	uint16_t nameLen;
+    uint16_t messageLen;
+	char username[10], message[255];
 	char letter;
 	int on = 1;
 	int sock;
@@ -116,7 +117,6 @@ int main( int argc, char **argv) {
 	FD_SET(sd, &readfds);
 	sock = sd+1;
 
-
 	/* TODO: Connect the socket to the specified server. You have to pass correct parameters to the connect function.*/
 	if (connect(sd, (struct sockaddr*) &sad, sizeof(sad)) < 0) {
 		if (errno != EINPROGRESS) {
@@ -131,18 +131,30 @@ int main( int argc, char **argv) {
 			perror("select"); // error occurred in select()
 	}
 
-	fullRead(sd, &letter, 1);
+    // Check if theres room for another connection
+	fullRead(sd, &letter, sizeof(letter));
 	if (letter == 'Y') {
 		//prompt input
 		printf("Enter your username: ");
 		fgets(username, 10, stdin);
 		printf("\n");
 		//validate name, timer
-		length = strlen(username);
-		send(sd, &length, 1, 0);
-		send(sd, username, length, 0);
+		nameLen = htons(strlen(username) - 1);
+		send(sd, &nameLen, sizeof(nameLen), 0);
+		send(sd, username, nameLen, 0);
 		printf("username sent\n");
 
+        recv(sd, &letter, sizeof(letter), 0);
+        printf("Read letter: %c\n", letter);
+        if(letter == 'Y') {
+            while(1) {
+                printf("Enter message: ");
+                fgets(message, 255, stdin);
+                messageLen = htons(strlen(message) - 1);
+                send(sd, &messageLen, sizeof(messageLen), 0);
+                printf("message sent: %s len %d\n", message, ntohs(messageLen));
+            }
+        }
 	}
 
 

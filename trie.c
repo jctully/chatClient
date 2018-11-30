@@ -1,7 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-
 // define character size
 // currently Trie supports lowercase English characters (a - z)
 #define CHAR_SIZE 26
@@ -51,8 +50,8 @@ void insert(struct Trie **head, char *str)
 // if the string is found in the Trie, else it returns 0
 int search(struct Trie *head, char *str)
 {
+    printf("searching");
     // return 0 if Trie is empty
-    printf("%p", &head);
     if (head == NULL)
         return 0;
 

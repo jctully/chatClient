@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <sys/select.h>
 
 struct Trie *getNewTrieNode();
 void insert(struct Trie **head, char *str);
@@ -50,7 +51,7 @@ void fullRead(int sd, char* buffer, int length) {
 		}
 		n += m;
 	}
-	buffer[length] = '\0';
+    buffer[length - 1] = '\0';
 }
 
 int main(int argc, char **argv) {
@@ -65,7 +66,8 @@ int main(int argc, char **argv) {
 	int MAX_PARTICIPANTS = 255;
 	char n = 'N', y = 'Y', t='T', invalid = 'I';
 	char username[10];
-	uint8_t length;
+    char message[255];
+	uint16_t nameLen, messageLen;
 	int rv, sock;
 	int on = 1;
 	struct Trie *activeUsers;
@@ -93,7 +95,6 @@ int main(int argc, char **argv) {
 
 	//TODO: Set local IP address to listen to all IP addresses this server can assume. You can do it by using INADDR_ANY
 	sad.sin_addr.s_addr = INADDR_ANY;
-
 	port = atoi(argv[1]); /* convert argument to binary */
 	if (port > 0) { /* test for illegal value */
 		//TODO: set port number. The data type is u_short
@@ -110,7 +111,6 @@ int main(int argc, char **argv) {
 	}
 
 	/* TODO: Create a socket with AF_INET as domain, protocol type as SOCK_STREAM, and protocol as ptrp->p_proto. This call returns a socket descriptor named sd. */
-
 	sd = socket(AF_INET, SOCK_STREAM, ptrp->p_proto);
 	if (sd < 0) {
 		fprintf(stderr, "Error: Socket creation failed\n");
@@ -123,6 +123,8 @@ int main(int argc, char **argv) {
 		fprintf(stderr, "Error Setting socket option failed\n");
 		exit(EXIT_FAILURE);
 	}
+
+    /* Makes sd (and children) nonblocking sockets*/
 	rv = ioctl(sd, FIONBIO, (char *)&on);
 	if (rv < 0)
 	{
@@ -147,12 +149,12 @@ int main(int argc, char **argv) {
 	sock = sd+1;
 	while (1) {
 		alen = sizeof(cad);
-		printf("before select\n");
 		rv = select(sock, &readfds, NULL, NULL, NULL);
 		if (rv == -1) {
 				perror("select"); // error occurred in select()
 		}
-		printf("after select\n");
+
+        // Accept client connections
 		if ((sd2 = accept(sd, (struct sockaddr *)&cad, &alen)) < 0) {
 			perror("accept");
 			exit(EXIT_FAILURE);
@@ -167,32 +169,40 @@ int main(int argc, char **argv) {
 			numParticipants--;
 		}
 
+        // Check for valid active participant
 		send(sd2, &y, 1, 0);
 		int validName = 0;
 		while (validName == 0) {
-			fullRead(sd2, &length, 1);
-			fullRead(sd2, username, length);
+			//fullRead(sd2, &nameLen, sizeof(nameLen));
+            recv(sd2, &nameLen, sizeof(nameLen), 0);
+			fullRead(sd2, username, nameLen);
+            username[nameLen - 1] = '\0';
 			//validate username
-			printf("here\n");
 
-			rv = search(activeUsers, username);
-			printf("after here\n");
+			//rv = search(activeUsers, username);
+            // Validate username
+            rv = 0;
 
 			if (rv == 1) {
 
-				send(sd2, &t, 1, 0);
+				send(sd2, &t, sizeof(t), 0);
 			}
 			else {
 
 				validName = 1;
-				send(sd2, &y, 1, 0);
+				send(sd2, &y, sizeof(y), 0);
 			}
 		}
-		printf("username: %s\n", username);
-		insert(&activeUsers, username);
-
-
-
+		printf("username: .%s.\n", username);
+        while(1) {
+            // active participant messages
+            //fullRead(sd2, &messageLen, sizeof(messageLen));
+            printf("Waiting to recv\n");
+            recv(sd2, &messageLen, sizeof(messageLen), 0);
+            printf("messagelen: %d", messageLen);
+            fullRead(sd2, message, sizeof(message));
+            printf("message: %s, len: %d\n", message, messageLen);
+        }
 
 		close(sd2);
 	}
