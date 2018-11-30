@@ -51,7 +51,7 @@ void fullRead(int sd, char* buffer, int length) {
 		}
 		n += m;
 	}
-    buffer[length - 1] = '\0';
+    buffer[length] = '\0';
 }
 
 int main(int argc, char **argv) {
@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
 	int MAX_PARTICIPANTS = 255;
 	char n = 'N', y = 'Y', t='T', invalid = 'I';
 	char username[10];
-    char message[255];
+  char message[255];
 	uint16_t nameLen, messageLen;
 	int rv, sock;
 	int on = 1;
@@ -154,11 +154,12 @@ int main(int argc, char **argv) {
 				perror("select"); // error occurred in select()
 		}
 
-        // Accept client connections
+    // Accept client connections
 		if ((sd2 = accept(sd, (struct sockaddr *)&cad, &alen)) < 0) {
 			perror("accept");
 			exit(EXIT_FAILURE);
 		}
+
 		FD_SET(sd2, &readfds);
 		sock = sd2+1;
 
@@ -169,19 +170,21 @@ int main(int argc, char **argv) {
 			numParticipants--;
 		}
 
-        // Check for valid active participant
+    // Check for valid active participant
 		send(sd2, &y, 1, 0);
 		int validName = 0;
 		while (validName == 0) {
 			//fullRead(sd2, &nameLen, sizeof(nameLen));
-            recv(sd2, &nameLen, sizeof(nameLen), 0);
+      recv(sd2, &nameLen, sizeof(nameLen), 0);
+			nameLen = ntohs(nameLen);
 			fullRead(sd2, username, nameLen);
-            username[nameLen - 1] = '\0';
+			printf("len = %d, name = .%s.\n", nameLen, username);
+
 			//validate username
 
 			//rv = search(activeUsers, username);
-            // Validate username
-            rv = 0;
+      // Validate username
+      rv = 0;
 
 			if (rv == 1) {
 
@@ -192,14 +195,14 @@ int main(int argc, char **argv) {
 				validName = 1;
 				send(sd2, &y, sizeof(y), 0);
 			}
-		}
-		printf("username: .%s.\n", username);
+		}	//use select here?
         while(1) {
             // active participant messages
             //fullRead(sd2, &messageLen, sizeof(messageLen));
             printf("Waiting to recv\n");
             recv(sd2, &messageLen, sizeof(messageLen), 0);
-            printf("messagelen: %d", messageLen);
+						messageLen = ntohs(messageLen);
+            printf("messagelen: %d\n", messageLen);
             fullRead(sd2, message, sizeof(message));
             printf("message: %s, len: %d\n", message, messageLen);
         }

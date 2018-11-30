@@ -139,7 +139,9 @@ int main( int argc, char **argv) {
 		fgets(username, 10, stdin);
 		printf("\n");
 		//validate name, timer
-		nameLen = htons(strlen(username) - 1);
+		nameLen = strlen(username) - 1;
+		printf("len = %d, name = .%s.\n", nameLen, username);
+		nameLen = htons(nameLen);
 		send(sd, &nameLen, sizeof(nameLen), 0);
 		send(sd, username, nameLen, 0);
 		printf("username sent\n");
@@ -152,7 +154,8 @@ int main( int argc, char **argv) {
                 fgets(message, 255, stdin);
                 messageLen = htons(strlen(message) - 1);
                 send(sd, &messageLen, sizeof(messageLen), 0);
-                printf("message sent: %s len %d\n", message, ntohs(messageLen));
+								send(sd, message, messageLen, 0);
+                printf("message sent: \"%s\" len %d\n", message, ntohs(messageLen));
             }
         }
 	}
