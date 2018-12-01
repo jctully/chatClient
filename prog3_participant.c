@@ -132,7 +132,8 @@ int main( int argc, char **argv) {
 	}
 
     // Check if theres room for another connection
-	fullRead(sd, &letter, sizeof(letter));
+		printf("waiting for first letter\n");
+	recv(sd, &letter, sizeof(letter), 0);
 	if (letter == 'Y') {
 		//prompt input
 		printf("Enter your username: ");

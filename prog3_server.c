@@ -47,11 +47,29 @@ char* fullRead(int sd, char* message) {
 
 }
 
+int resetFDSet(fd_set *readfds, int sd[255], int sdl) {
+	printf("inside reset fds function\n");
+	FD_ZERO(readfds);
+	FD_SET(sdl, readfds);
+	printf("here\n");
+	int maxsd = -1;
+	for (int i=0; i<255; i++) {
+		if (sd[i] != -1) {
+			printf("sd %d in use\n", i);
+			FD_SET(sd[i], readfds);
+			if (sd[i] > maxsd) {
+				maxsd = sd[i];
+			}
+		}
+	}
+	return ++maxsd;
+}
+
 int main(int argc, char **argv) {
 	struct protoent *ptrp; /* pointer to a protocol table entry */
 	struct sockaddr_in sad; /* structure to hold server's address */
 	struct sockaddr_in cad; /* structure to hold client's address */
-	int sd, sd2; /* socket descriptors */
+	int sd, sdt, sd2[255]; /* socket descriptors */
 	int port; /* protocol port number */
 	int alen; /* length of address */
 	int optval = 1; /* boolean value when we set socket option */
@@ -64,6 +82,10 @@ int main(int argc, char **argv) {
 	int rv, sock;
 	int on = 1;
 	struct Trie *activeUsers;
+
+	for (int i=0; i<255; i++) {
+		sd2[i] = -1;
+	}
 
 	fd_set readfds;
 	FD_ZERO(&readfds);
@@ -108,21 +130,11 @@ int main(int argc, char **argv) {
 		fprintf(stderr, "Error: Socket creation failed\n");
 		exit(EXIT_FAILURE);
 	}
-	FD_SET(sd, &readfds);
 
 	/* Allow reuse of port - avoid "Bind failed" issues */
 	if( setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0 ) {
 		fprintf(stderr, "Error Setting socket option failed\n");
 		exit(EXIT_FAILURE);
-	}
-
-    /* Makes sd (and children) nonblocking sockets*/
-	rv = ioctl(sd, FIONBIO, (char *)&on);
-	if (rv < 0)
-	{
-	  perror("ioctl() failed");
-	  close(sd);
-	  exit(EXIT_FAILURE);
 	}
 
 	/* TODO: Bind a local address to the socket. For this, you need to pass correct parameters to the bind function. */
@@ -131,43 +143,50 @@ int main(int argc, char **argv) {
 		exit(EXIT_FAILURE);
 	}
 
+	/* Makes sd (and children) nonblocking sockets*/
+rv = ioctl(sd, FIONBIO, (char *)&on);
+if (rv < 0)
+{
+	perror("ioctl() failed");
+	close(sd);
+	exit(EXIT_FAILURE);
+}
+
 	/* TODO: Specify size of request queue. Listen take 2 parameters -- socket descriptor and QLEN, which has been set at the top of this code. */
 	if (listen(sd, QLEN) < 0) {
 		fprintf(stderr,"Error: Listen failed\n");
 		exit(EXIT_FAILURE);
 	}
 
-	/* Main server loop - accept and handle requests */
+	FD_SET(sd, &readfds);
 	sock = sd+1;
+	/* Main server loop - accept and handle requests */
 	while (1) {
 		alen = sizeof(cad);
 		rv = select(sock, &readfds, NULL, NULL, NULL);
 		if (rv == -1) {
 				perror("select"); // error occurred in select()
 		}
-
     // Accept client connections
-		if ((sd2 = accept(sd, (struct sockaddr *)&cad, &alen)) < 0) {
+		if ((sd2[0] = accept(sd, (struct sockaddr *)&cad, &alen)) < 0) {
 			perror("accept");
 			exit(EXIT_FAILURE);
 		}
 
-		FD_SET(sd2, &readfds);
-		sock = sd2+1;
-
 		numParticipants++;
 		if (numParticipants > MAX_PARTICIPANTS) {
-			send(sd2, &n, 1, 0);
-			close(sd2);
+			send(sd2[0], &n, 1, 0);
+			close(sd2[0]);
 			numParticipants--;
 		}
 
     // Check for valid active participant
-		send(sd2, &y, 1, 0);
+		//printf("sending first letter\n");
+		send(sd2[0], &y, 1, 0);
 		int validName = 0;
 		while (validName == 0) {
 			//fullRead(sd2, &nameLen, sizeof(nameLen));
-			fullRead(sd2, username);
+			fullRead(sd2[0], usock, &readfdssername);
 			printf("name = .%s.\n", username);
 
 			//validate username
@@ -178,25 +197,30 @@ int main(int argc, char **argv) {
 
 			if (rv == 1) {
 
-				send(sd2, &t, sizeof(t), 0);
+				send(sd2[0], &t, sizeof(t), 0);
 			}
 			else {
 
 				validName = 1;
-				send(sd2, &y, sizeof(y), 0);
+				send(sd2[0], &y, sizeof(y), 0);
 			}
 		}	//use select here?
     		while(1) {
+					printf("sd2[0] = %d\n", sd2[0]);
+					sock = resetFDSet(&readfds, sd2, sd);
+					printf("fds reset, sock = %d\n", sock);
+					rv = select(sock, &readfds, NULL, NULL, NULL);
+					if (rv == -1) {
+							perror("select"); // error occurred in select()
+					}
             // active participant messages
-            //fullRead(sd2, &messageLen, sizeof(messageLen));
-            printf("Waiting to recv\n");
-            //recv(sd2, &messageLen, sizeof(messageLen), 0);
-						//messageLen = ntohs(messageLen);
-            //printf("messagelen: %d\n", messageLen);
-            fullRead(sd2, message);
-            printf("terminated message: .%s.\n", message);
+          printf("Waiting to recv\n");
+					if (FD_ISSET(sd2[0], &readfds)) {
+          	fullRead(sd2[0], message);
+          	printf("terminated message: .%s.\n", message);
+					}
         }
 
-		close(sd2);
+		close(sd2[0]);
 	}
 }
