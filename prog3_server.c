@@ -36,22 +36,15 @@ int numParticipants = 0; /* counts client connections */
 *------------------------------------------------------------------------
 */
 
-void fullRead(int sd, char* buffer, int length) {
-	int m;
-	int n =  recv(sd, buffer, length, 0);
-	if (n<0) {
-		perror("recv");
-		exit(EXIT_FAILURE);
-	}
-	while (n < length) {
-		m =  recv(sd, buffer, length - n, 0);
-		if (m<0) {
-			perror("recv");
-			exit(EXIT_FAILURE);
-		}
-		n += m;
-	}
-    buffer[length] = '\0';
+char* fullRead(int sd, char* message) {
+	uint16_t messageLen = 0;
+
+	recv(sd, &messageLen, sizeof(messageLen), MSG_WAITALL);
+	//printf("converetd len %d\n", messageLen);
+	recv(sd, message, messageLen, MSG_WAITALL);
+	//printf("message: \"%s\"\n", message);
+	message[messageLen-1] = '\0';
+
 }
 
 int main(int argc, char **argv) {
@@ -71,7 +64,6 @@ int main(int argc, char **argv) {
 	int rv, sock;
 	int on = 1;
 	struct Trie *activeUsers;
-
 
 	fd_set readfds;
 	FD_ZERO(&readfds);
@@ -175,10 +167,8 @@ int main(int argc, char **argv) {
 		int validName = 0;
 		while (validName == 0) {
 			//fullRead(sd2, &nameLen, sizeof(nameLen));
-      recv(sd2, &nameLen, sizeof(nameLen), 0);
-			nameLen = ntohs(nameLen);
-			fullRead(sd2, username, nameLen);
-			printf("len = %d, name = .%s.\n", nameLen, username);
+			fullRead(sd2, username);
+			printf("name = .%s.\n", username);
 
 			//validate username
 
@@ -196,15 +186,15 @@ int main(int argc, char **argv) {
 				send(sd2, &y, sizeof(y), 0);
 			}
 		}	//use select here?
-        while(1) {
+    		while(1) {
             // active participant messages
             //fullRead(sd2, &messageLen, sizeof(messageLen));
             printf("Waiting to recv\n");
-            recv(sd2, &messageLen, sizeof(messageLen), 0);
-						messageLen = ntohs(messageLen);
-            printf("messagelen: %d\n", messageLen);
-            fullRead(sd2, message, sizeof(message));
-            printf("message: %s, len: %d\n", message, messageLen);
+            //recv(sd2, &messageLen, sizeof(messageLen), 0);
+						//messageLen = ntohs(messageLen);
+            //printf("messagelen: %d\n", messageLen);
+            fullRead(sd2, message);
+            printf("terminated message: .%s.\n", message);
         }
 
 		close(sd2);
