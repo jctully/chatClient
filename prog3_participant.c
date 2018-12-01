@@ -154,7 +154,7 @@ int main( int argc, char **argv) {
                 fgets(message, 255, stdin);
                 messageLen = strlen(message);
                 send(sd, &messageLen, sizeof(messageLen), 0);
-								send(sd, message, messageLen, 0);
+				send(sd, message, messageLen, 0);
                 printf("message sent: \"%s\"\n", message);
             }
         }

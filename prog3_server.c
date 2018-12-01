@@ -3,6 +3,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <ctype.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <string.h>
@@ -36,7 +37,7 @@ int numParticipants = 0; /* counts client connections */
 *------------------------------------------------------------------------
 */
 
-char* fullRead(int sd, char* message) {
+void fullRead(int sd, char* message) {
 	uint16_t messageLen = 0;
 
 	recv(sd, &messageLen, sizeof(messageLen), MSG_WAITALL);
@@ -45,6 +46,46 @@ char* fullRead(int sd, char* message) {
 	//printf("message: \"%s\"\n", message);
 	message[messageLen-1] = '\0';
 
+}
+
+void listUsernames(char usedNames[255][10]) {
+    printf("Usernames:\n");
+    for(int i = 0; i < 255; i++)
+    {
+        if(strcmp(usedNames[i], "") != 0)
+            printf("%s\n", usedNames[i]);
+    }
+}
+
+void initUsernames(char usedNames[255][10]) {
+    char blank = '\0';
+    for(int i = 0; i < 255; i++)
+    {
+        strcpy(usedNames[i], &blank);
+    }
+}
+
+int addUsername(char usedNames[255][10], char *username) {
+    // Check if username is already in usedNames
+    for(int i = 0; i < 255; i++)
+    {
+        if(strcmp(usedNames[i], username) == 0)
+            return 0;
+
+    }
+    // Verify format of username
+
+    // Add username to first empty slot
+    for(int i = 0; i < 255; i++)
+    {
+        if(strcmp(usedNames[i], "") == 0) {
+            strcpy(usedNames[i], username);
+            break;
+        }
+    }
+
+    //
+    return 1;
 }
 
 int main(int argc, char **argv) {
@@ -59,7 +100,8 @@ int main(int argc, char **argv) {
 	int MAX_PARTICIPANTS = 255;
 	char n = 'N', y = 'Y', t='T', invalid = 'I';
 	char username[10];
-  char message[255];
+    char message[255];
+    char usedUsernames[255][10];
 	uint16_t nameLen, messageLen;
 	int rv, sock;
 	int on = 1;
@@ -162,6 +204,8 @@ int main(int argc, char **argv) {
 			numParticipants--;
 		}
 
+        // Init active usernames array
+        initUsernames(usedUsernames);
     // Check for valid active participant
 		send(sd2, &y, 1, 0);
 		int validName = 0;
@@ -171,27 +215,23 @@ int main(int argc, char **argv) {
 			printf("name = .%s.\n", username);
 
 			//validate username
-
-			//rv = search(activeUsers, username);
-      // Validate username
-      rv = 0;
-
-			if (rv == 1) {
-
-				send(sd2, &t, sizeof(t), 0);
-			}
-			else {
-
-				validName = 1;
-				send(sd2, &y, sizeof(y), 0);
-			}
+            strcpy(usedUsernames[0], "test");
+            if(addUsername(usedUsernames, username)) {
+                // Valid name
+                validName = 1;
+                send(sd2, &y, sizeof(y), 0);
+            } else {
+            	send(sd2, &t, sizeof(t), 0);
+                break;
+            }
 		}	//use select here?
-    		while(1) {
+        listUsernames(usedUsernames);
+    	while(1) {
             // active participant messages
             //fullRead(sd2, &messageLen, sizeof(messageLen));
             printf("Waiting to recv\n");
             //recv(sd2, &messageLen, sizeof(messageLen), 0);
-						//messageLen = ntohs(messageLen);
+			//messageLen = ntohs(messageLen);
             //printf("messagelen: %d\n", messageLen);
             fullRead(sd2, message);
             printf("terminated message: .%s.\n", message);
