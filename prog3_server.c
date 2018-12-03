@@ -6,6 +6,7 @@
 #include <ctype.h>
 #include <netdb.h>
 #include <stdio.h>
+#include <time.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -65,15 +66,30 @@ void initUsernames(char usedNames[255][10]) {
     }
 }
 
+/* -1 - T
+	0 - I
+	1 - Y */
 int addUsername(char usedNames[255][10], char *username) {
+	//int valid = 1;
+    // Verify format of username
+	char *cur = username;
+	int i = 0;
+	while(*cur && i < 10) {
+		if(isalnum(*cur) || *cur == '_') {
+			*cur++;
+		} else {
+			return 0;
+		}
+		i++;
+	}
+
     // Check if username is already in usedNames
     for(int i = 0; i < 255; i++)
     {
-        if(strcmp(usedNames[i], username) == 0)
-            return 0;
-
-    }
-    // Verify format of username
+        if(strcmp(usedNames[i], username) == 0) {
+            return -1;
+		}
+    }	
 
     // Add username to first empty slot
     for(int i = 0; i < 255; i++)
@@ -84,7 +100,6 @@ int addUsername(char usedNames[255][10], char *username) {
         }
     }
 
-    //
     return 1;
 }
 
@@ -101,6 +116,8 @@ int main(int argc, char **argv) {
 	char n = 'N', y = 'Y', t='T', invalid = 'I';
 	char username[10];
     char message[255];
+	struct timespec start, end;
+	double timeDiff = 0;
     char usedUsernames[255][10];
 	uint16_t nameLen, messageLen;
 	int rv, sock;
@@ -188,7 +205,7 @@ int main(int argc, char **argv) {
 				perror("select"); // error occurred in select()
 		}
 
-    // Accept client connections
+    	// Accept client connections
 		if ((sd2 = accept(sd, (struct sockaddr *)&cad, &alen)) < 0) {
 			perror("accept");
 			exit(EXIT_FAILURE);
@@ -206,25 +223,57 @@ int main(int argc, char **argv) {
 
         // Init active usernames array
         initUsernames(usedUsernames);
-    // Check for valid active participant
+    	// Check for valid active participant
 		send(sd2, &y, 1, 0);
+
+		// Start timer
+		if (clock_gettime(CLOCK_REALTIME, &start) == -1)
+		{
+			perror("clock gettime");
+			exit(EXIT_FAILURE);
+		}
+
 		int validName = 0;
-		while (validName == 0) {
+		while (validName < 1) {
 			//fullRead(sd2, &nameLen, sizeof(nameLen));
 			fullRead(sd2, username);
 			printf("name = .%s.\n", username);
 
 			//validate username
-            strcpy(usedUsernames[0], "test");
-            if(addUsername(usedUsernames, username)) {
+
+			/* -1 - T
+			0 - I
+			1 - Y */
+			validName = addUsername(usedUsernames, username);
+            if(validName == 1) {
                 // Valid name
-                validName = 1;
                 send(sd2, &y, sizeof(y), 0);
-            } else {
+				printf("sent y\n");
+            } else if(validName == 0) {
+            	send(sd2, &invalid, sizeof(invalid), 0);
+				printf("sent i\n");
+            } else if(validName == -1) {
             	send(sd2, &t, sizeof(t), 0);
-                break;
+				// reset clock
+				if (clock_gettime(CLOCK_REALTIME, &start) == -1) {
+					perror("clock gettime");
+					exit(EXIT_FAILURE);
+				}
+				printf("sent t\n");
             }
 		}	//use select here?
+		if (clock_gettime(CLOCK_REALTIME, &end) == -1) {
+			perror("clock gettime");
+			exit(EXIT_FAILURE);
+		}
+		timeDiff = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1E9;
+		printf("Received %s in %.2lf\n", username, timeDiff);
+		if(timeDiff > 10) {
+			printf("Client took too long, closing connection.\n");
+			close(sd2);
+			numParticipants--;
+			continue;
+		}
         listUsernames(usedUsernames);
     	while(1) {
             // active participant messages
