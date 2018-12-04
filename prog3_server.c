@@ -49,7 +49,7 @@ void fullRead(int sd, char* message) {
 
 }
 
-void listUsernames(char usedNames[255][10]) {
+void listUsernames(char usedNames[255][11]) {
     printf("Usernames:\n");
     for(int i = 0; i < 255; i++)
     {
@@ -58,7 +58,7 @@ void listUsernames(char usedNames[255][10]) {
     }
 }
 
-void initUsernames(char usedNames[255][10]) {
+void initUsernames(char usedNames[255][11]) {
     char blank = '\0';
     for(int i = 0; i < 255; i++)
     {
@@ -69,12 +69,16 @@ void initUsernames(char usedNames[255][10]) {
 /* -1 - T
 0 - I
 1 - Y */
-int addUsername(char usedNames[255][10], char *username) {
+int addUsername(char usedNames[255][11], char *username) {
     //int valid = 1;
     // Verify format of username
+    int len = strlen(username);
+    if(len > 10 || len < 1) {
+        return 0;
+    }
     char *cur = username;
     int i = 0;
-    while(*cur && i < 10) {
+    while(*cur && i < 11) {
         if(isalnum(*cur) || *cur == '_') {
             *cur++;
         } else {
@@ -114,11 +118,11 @@ int main(int argc, char **argv) {
     char buf[1000]; /* buffer for string the server sends */
     int MAX_PARTICIPANTS = 255;
     char n = 'N', y = 'Y', t='T', invalid = 'I';
-    char username[10];
+    char username[11];
     char message[255];
     struct timespec start, end;
     double timeDiff = 0;
-    char usedUsernames[255][10];
+    char usedUsernames[255][11];
     uint16_t nameLen, messageLen;
     int rv, sock;
     int on = 1;

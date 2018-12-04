@@ -56,7 +56,7 @@ int main( int argc, char **argv) {
     char buf[1000]; /* buffer for data from the server */
     uint16_t nameLen;
     uint16_t messageLen;
-    char username[10], message[255];
+    char username[11], message[255];
     char letter;
     int on = 1;
     int sock;
@@ -136,14 +136,14 @@ int main( int argc, char **argv) {
     if (letter == 'Y') {
         //prompt input
         printf("Enter your username: ");
-        fgets(username, 10, stdin);
+        fgets(buf, 255, stdin);
         printf("\n");
         //validate name, timer
-        nameLen = strlen(username);
-        printf("len = %d, name = .%s.\n", nameLen, username);
+        nameLen = strlen(buf);
+        printf("len = %d, name = .%s.\n", nameLen, buf);
         //nameLen = htons(nameLen);
         send(sd, &nameLen, sizeof(nameLen), 0);
-        send(sd, username, nameLen, 0);
+        send(sd, buf, nameLen, 0);
         printf("username sent\n");
 
         recv(sd, &letter, sizeof(letter), 0);
