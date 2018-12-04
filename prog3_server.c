@@ -18,6 +18,8 @@ int haveChildren(struct Trie *curr);
 int deletion(struct Trie **curr, char *str);
 
 #define QLEN 6 /* size of request queue */
+#define MAX_LENGTH 1000 //max msg len
+#define MAX_PARTICIPANTS 255 //max participants
 int numParticipants = 0; /* counts client connections */
 
 /*------------------------------------------------------------------------
@@ -36,14 +38,18 @@ int numParticipants = 0; /* counts client connections */
 *------------------------------------------------------------------------
 */
 
-char* fullRead(int sd, char* message) {
+int fullRead(int sd, char* message) {
   uint16_t messageLen = 0;
 
   recv(sd, &messageLen, sizeof(messageLen), 0);
+  if (messageLen > MAX_LENGTH) {
+    return -1;
+  }
   //printf("converetd len %d\n", messageLen);
   recv(sd, message, messageLen, 0);
   //printf("message: \"%s\"\n", message);
   message[messageLen-1] = '\0';
+  return 0;
 
 }
 
@@ -64,6 +70,23 @@ int resetFDSet(fd_set *readfds, int sd[255], int sdl) {
   return ++maxsd;
 }
 
+void sendPrivate(char *message) {
+  printf("sending private\n");
+  char *username, *copy, *token;
+  const char delim[2] = " ";
+
+  token = strtok(message, delim);
+  username = token++;
+  printf("user = .%s.\n", username);
+  //search for username, validate
+
+  //TODO: pull message from input str
+  message = message + strlen(username);
+  printf("message = .%s.\n", message);
+
+
+}
+
 int main(int argc, char **argv) {
   struct protoent *ptrp; /* pointer to a protocol table entry */
   struct sockaddr_in sad; /* structure to hold server's address */
@@ -73,10 +96,10 @@ int main(int argc, char **argv) {
   int alen; /* length of address */
   int optval = 1; /* boolean value when we set socket option */
   char buf[1000]; /* buffer for string the server sends */
-  int MAX_PARTICIPANTS = 255;
-  char n = 'N', y = 'Y', t='T', invalid = 'I';
+  char n = 'N', y = 'Y', t='T', invalid = 'I', *token;
+
   char username[10];
-  char message[255];
+  char message[MAX_LENGTH];
   uint16_t nameLen, messageLen;
   int rv, sock;
   int on = 1;
@@ -182,12 +205,14 @@ int main(int argc, char **argv) {
     // Accept client connections
 
     if (FD_ISSET(sd, &readfds)) {
+      printf("running accept\n");
       if ((sd2[i] = accept(sd, (struct sockaddr *)&cad, &alen)) < 0) {
          perror("accept");
          exit(EXIT_FAILURE);
       }
 
-      if (numParticipants+1 > MAX_PARTICIPANTS) {
+      if (numParticipants+1 >= MAX_PARTICIPANTS) {
+        printf("numP = %d, no room\n", numParticipants);
         send(sd2[i], &n, 1, 0);
         close(sd2[i]);
         sd2[i] = -1;
@@ -215,23 +240,47 @@ int main(int argc, char **argv) {
           validName = 1;
           send(sd2[0], &y, sizeof(y), 0);
         }
-      }
+      } //end validate loop
 
-   }
+   } //end if new client
 
     printf("sd2[0] = %d\n", sd2[0]);
 
     // active participant messages
-    printf("Waiting to recv\n");
+    //printf("Waiting to recv\n");
     for (int j = 0; j<255; j++) {
       if (FD_ISSET(sd2[j], &readfds)) {
         printf("sd2[%d] set\n", j);
-        fullRead(sd2[j], message);
+        if (rv = fullRead(sd2[j], message) < 0) {
+          printf("Message too long, closing connection sd[%d]\n", j);
+          close(sd2[j]);
+          sd2[j] = -1;
+          numParticipants--;
+          break;
+        }
         printf("terminated message: .%s.\n", message);
+        /*if (strlen(message) > MAX_LENGTH) {
+          printf("Message too long, closing connection sd[%d]\n", j);
+          close(sd2[j]);
+          sd2[j] = -1;
+          numParticipants--;
+          break;
+        }*/
+        if (strcmp("quit", message) == 0) {
+          printf("Quit received, closing connection sd[%d]\n", j);
+          close(sd2[j]);
+          sd2[j] = -1;
+          numParticipants--;
+        }
+        else if (message[0] == '@') {
+          sendPrivate(message);
+        }
       }
     }
 
   }
+  printf("Closing connection\n");
   close(sd2[0]);
   sd2[0] = -1;
+  numParticipants--;
 }

@@ -13,6 +13,9 @@
 #include <sys/ioctl.h>
 #include <errno.h>
 
+#define MAX_LENGTH 1000
+
+
 
 /*------------------------------------------------------------------------
 * Program: demo_client
@@ -56,7 +59,7 @@ int main( int argc, char **argv) {
   char buf[1000]; /* buffer for data from the server */
   uint16_t nameLen;
   uint16_t messageLen;
-  char username[10], message[255];
+  char username[10], message[255], *state;
   char letter;
   int on = 1;
   int sock;
@@ -129,39 +132,60 @@ int main( int argc, char **argv) {
   rv = select(sock, &readfds, NULL, NULL, NULL);
   if (rv == -1) {
     perror("select"); // error occurred in select()
+    exit(EXIT_FAILURE);
   }
-
   // Check if theres room for another connection
-  printf("waiting for first letter\n");
-  recv(sd, &letter, sizeof(letter), 0);
+  printf("waiting for server response\n");
+  recv(sd, &letter, 1, 0);
   if (letter == 'Y') {
+    state = "inac";
     //prompt input
-    printf("Enter your username: ");
-    fgets(username, 10, stdin);
-    printf("\n");
-    //validate name, timer
-    nameLen = strlen(username);
-    printf("len = %d, name = .%s.\n", nameLen, username);
-    //nameLen = htons(nameLen);
-    send(sd, &nameLen, sizeof(nameLen), 0);
-    send(sd, username, nameLen, 0);
-    printf("username sent\n");
+    while (state=="inac") {
+      printf("Enter your username: ");
+      fgets(username, 10, stdin);
+      printf("\n");
+      //validate name, timer
+      nameLen = strlen(username);
+      printf("len = %d, name = .%s.\n", nameLen, username);
+      //nameLen = htons(nameLen);
+      send(sd, &nameLen, sizeof(nameLen), 0);
+      send(sd, username, nameLen, 0);
+      printf("username sent\n");
 
-    recv(sd, &letter, sizeof(letter), 0);
-    printf("Read letter: %c\n", letter);
-    if(letter == 'Y') {
-      while(1) {
-        printf("Enter message: ");
-        fgets(message, 255, stdin);
-        messageLen = strlen(message);
-        send(sd, &messageLen, sizeof(messageLen), 0);
-        send(sd, message, messageLen, 0);
-        printf("message sent: \"%s\"\n", message);
+      recv(sd, &letter, sizeof(letter), 0);
+      printf("Read letter: %c\n", letter);
+      if(letter == 'Y') {
+        state = "ac";
       }
-    }
+      else if (letter == 'T') {
+        printf("Username taken.\n");
+      }
+      else if (letter == 'I') {
+        printf("Username invalid.\n");
+      }
+    }//end inac state
+
+    while(1) {//message loop
+      printf("Enter message: ");
+      fgets(message, 255, stdin);
+      messageLen = strlen(message);
+      send(sd, &messageLen, sizeof(messageLen), 0);
+      send(sd, message, messageLen, 0);
+      //printf("message sent: \"%s\"\n", message);
+      if (strlen(message) > MAX_LENGTH) {
+        printf("Message too long. ");
+        break;
+      }
+      if (strcmp("quit\n", message) == 0) {
+        printf("Quit received. ");
+        break;
+      }
+    } //end message loop
+
+  } else if (letter=='N') {
+    printf("Server full. ");
   }
-
-
+  printf("Closing connection\n");
   close(sd);
 
   exit(EXIT_SUCCESS);
