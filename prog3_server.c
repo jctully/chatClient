@@ -161,12 +161,14 @@ int main(int argc, char **argv) {
 
   /* Main server loop - accept and handle requests */
   while (1) {
+    //update next open slot
     for (i=0; i<255; i++) {
       if (sd2[i]==-1) {
         break;
       }
     }
     printf("next open ind = %d\n", i);
+
     alen = sizeof(cad);
     sock = resetFDSet(&readfds, sd2, sd);
     printf("sock = %d\n", sock);
@@ -175,34 +177,32 @@ int main(int argc, char **argv) {
       perror("select"); // error occurred in select()
       exit(EXIT_FAILURE);
     }
-    printf("after select\n");
-    // Accept client connections }
+    //printf("after select\n");
+
+    // Accept client connections
 
     if (FD_ISSET(sd, &readfds)) {
       if ((sd2[i] = accept(sd, (struct sockaddr *)&cad, &alen)) < 0) {
          perror("accept");
          exit(EXIT_FAILURE);
       }
-      numParticipants++;
-      if (numParticipants > MAX_PARTICIPANTS) {
-        send(sd2[0], &n, 1, 0);
-        close(sd2[0]);
-        sd2[0] = -1;
-        numParticipants--;
+
+      if (numParticipants+1 > MAX_PARTICIPANTS) {
+        send(sd2[i], &n, 1, 0);
+        close(sd2[i]);
+        sd2[i] = -1;
+        continue;
       }
 
+      numParticipants++;
       // Check for valid active participant
-      //printf("sending first letter\n");
-      send(sd2[0], &y, 1, 0);
+      send(sd2[i], &y, 1, 0);
       int validName = 0;
       while (validName == 0) {
         //fullRead(sd2, &nameLen, sizeof(nameLen));
-        fullRead(sd2[0], username);
+        fullRead(sd2[i], username);
         printf("name = .%s.\n", username);
 
-        //validate username
-
-        //rv = search(activeUsers, username);
         // Validate username
         rv = 0;
 
@@ -223,10 +223,12 @@ int main(int argc, char **argv) {
 
     // active participant messages
     printf("Waiting to recv\n");
-    if (FD_ISSET(sd2[0], &readfds)) {
-      printf("sd2[0] set\n");
-      fullRead(sd2[0], message);
-      printf("terminated message: .%s.\n", message);
+    for (int j = 0; j<255; j++) {
+      if (FD_ISSET(sd2[j], &readfds)) {
+        printf("sd2[%d] set\n", j);
+        fullRead(sd2[j], message);
+        printf("terminated message: .%s.\n", message);
+      }
     }
 
   }
