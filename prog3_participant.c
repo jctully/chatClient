@@ -59,7 +59,7 @@ int main( int argc, char **argv) {
   char buf[1000]; /* buffer for data from the server */
   uint16_t nameLen;
   uint16_t messageLen;
-  char username[10], message[255], *state;
+  char message[255], *state;
   char letter;
   int on = 1;
   int sock;
@@ -109,16 +109,7 @@ int main( int argc, char **argv) {
     fprintf(stderr, "Error: Socket creation failed\n");
     exit(EXIT_FAILURE);
   }
-  rv = ioctl(sd, FIONBIO, (char *)&on);
-  if (rv < 0)
-  {
-    perror("ioctl() failed");
-    close(sd);
-    exit(EXIT_FAILURE);
-  }
 
-  FD_SET(sd, &readfds);
-  sock = sd+1;
 
   /* TODO: Connect the socket to the specified server. You have to pass correct parameters to the connect function.*/
   if (connect(sd, (struct sockaddr*) &sad, sizeof(sad)) < 0) {
@@ -128,12 +119,6 @@ int main( int argc, char **argv) {
     }
   }
 
-  /* Repeatedly read data from socket and write to user's screen. */
-  rv = select(sock, &readfds, NULL, NULL, NULL);
-  if (rv == -1) {
-    perror("select"); // error occurred in select()
-    exit(EXIT_FAILURE);
-  }
   // Check if theres room for another connection
   printf("waiting for server response\n");
   recv(sd, &letter, 1, 0);
@@ -142,14 +127,14 @@ int main( int argc, char **argv) {
     //prompt input
     while (state=="inac") {
       printf("Enter your username: ");
-      fgets(username, 10, stdin);
+      fgets(buf, 255, stdin);
       printf("\n");
       //validate name, timer
-      nameLen = strlen(username);
-      printf("len = %d, name = .%s.\n", nameLen, username);
+      nameLen = strlen(buf);
+      printf("len = %d, name = .%s.\n", nameLen, buf);
       //nameLen = htons(nameLen);
       send(sd, &nameLen, sizeof(nameLen), 0);
-      send(sd, username, nameLen, 0);
+      send(sd, buf, nameLen, 0);
       printf("username sent\n");
 
       recv(sd, &letter, sizeof(letter), 0);
