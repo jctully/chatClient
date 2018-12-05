@@ -74,8 +74,8 @@ void initUsernames(char usedNames[255][11]) {
 
 /* -1 - T
 0 - I
-1 - Y */
-int addUsername(char usedNames[255][11], char *username) {
+1 - Valid & free */
+int checkUsername(char usedNames[255][11], char *username) {
     //int valid = 1;
     // Verify format of username
     int len = strlen(username);
@@ -101,16 +101,23 @@ int addUsername(char usedNames[255][11], char *username) {
         }
     }
 
-    // Add username to first empty slot
-    for(int i = 0; i < 255; i++)
-    {
-        if(strcmp(usedNames[i], "") == 0) {
-            strcpy(usedNames[i], username);
-            break;
-        }
-    }
-
     return 1;
+}
+
+//return 1 if name added, else -1
+int addUsername (char usedNames[255][11], char *username, int i) {
+  // Add username to first empty slot
+  /* for(int i = 0; i < 255; i++)
+  {
+      if(strcmp(usedNames[i], "") == 0) {
+          strcpy(usedNames[i], username);
+          return 1;
+      }
+  } */
+  strcpy(usedNames[i], username);
+
+  return 1;
+
 }
 
 int resetFDSet(fd_set *readfds, int sd[255], int sdl) {
@@ -130,21 +137,44 @@ int resetFDSet(fd_set *readfds, int sd[255], int sdl) {
     return ++maxsd;
 }
 
-void sendPrivate(char *message) {
+void sendPrivate(char *message, char usedUsernames[255][11]) {
     printf("sending private\n");
     char *username, *copy, *token;
-    const char delim[2] = " ";
+    const char delim = ' ';
+    int rv;
 
-    token = strtok(message, delim);
+    token = strtok(message, &delim);
     username = token++;
     printf("user = .%s.\n", username);
     //search for username, validate
+    rv = checkUsername(usedUsernames, username);
+    if (rv >= 0) {
+      printf("Could not find user\n");
+    }
 
     //TODO: pull message from input str
     message = message + strlen(username);
     printf("message = .%s.\n", message);
 
 
+}
+
+char* publicMessage(char *message, char *username) {
+  char temp[1000];
+  char publicMessage[14] = ">           : ";
+
+  int j=strlen(username)-1;
+  for (int i=11; i>0; i--) {
+    if (j>=0) {
+      publicMessage[i] = username[j];
+    }
+    j--;
+  }
+  strcpy(temp, publicMessage);
+  strcpy(&temp[14], message);
+  printf("publicMessage output: \"%s\"\n", temp);
+
+  return temp;
 }
 
 int main(int argc, char **argv) {
@@ -157,6 +187,7 @@ int main(int argc, char **argv) {
     int optval = 1; /* boolean value when we set socket option */
     char buf[1000]; /* buffer for string the server sends */
     char n = 'N', y = 'Y', t='T', invalid = 'I', *token;
+    char privateMessage[14] = "-           : ";
 
     char username[11];
     char message[MAX_LENGTH];
@@ -248,12 +279,14 @@ int main(int argc, char **argv) {
     initUsernames(usedUsernames);
 
     /* Main server loop - accept and handle requests */
-    while (1) {
+    while (1) {    const char delim = ' ';
+
         //update next open slot
         for (i=0; i<255; i++) {
             if (sd2[i]==-1) {
                 break;
-            }
+            }    const char delim = ' ';
+
         }
         printf("next open ind = %d\n", i);
 
@@ -292,7 +325,8 @@ int main(int argc, char **argv) {
             if (clock_gettime(CLOCK_REALTIME, &start) == -1)
             {
                 perror("clock gettime");
-                exit(EXIT_FAILURE);
+                exit(EXIT_FAILURE);    const char delim = ' ';
+
             }
             int validName = 0;
             while (validName < 1) {
@@ -301,8 +335,10 @@ int main(int argc, char **argv) {
                 printf("name = .%s.\n", username);
 
                 // Validate username
-                validName = addUsername(usedUsernames, username);
-                rv = 0;
+                validName = checkUsername(usedUsernames, username);
+                if (validName == 1) {
+                  addUsername(usedUsernames, username, i);
+                }
 
                 if(validName == 1) {
                     // Valid name
@@ -319,7 +355,6 @@ int main(int argc, char **argv) {
                         perror("clock gettime");
                         exit(EXIT_FAILURE);
                     }
-                    printf("sent t\n");
                 }
             } //end validate loop
             if (clock_gettime(CLOCK_REALTIME, &end) == -1) {
@@ -331,6 +366,8 @@ int main(int argc, char **argv) {
             if(timeDiff > 10) {
                 printf("Client took too long, closing connection.\n");
                 close(sd2[i]);
+                sd2[i]=-1;
+                strcpy(usedUsernames[i], "");
                 numParticipants--;
                 continue;
             }
@@ -349,32 +386,39 @@ int main(int argc, char **argv) {
                     printf("Message too long, closing connection sd[%d]\n", j);
                     close(sd2[j]);
                     sd2[j] = -1;
+                    strcpy(usedUsernames[j], "");
                     numParticipants--;
                     break;
                 }
                 printf("terminated message: .%s.\n", message);
-                /*if (strlen(message) > MAX_LENGTH) {
-                printf("Message too long, closing connection sd[%d]\n", j);
-                close(sd2[j]);
-                sd2[j] = -1;
-                numParticipants--;
-                break;
-            }*/
             if (strcmp("quit", message) == 0) {
                 printf("Quit received, closing connection sd[%d]\n", j);
                 close(sd2[j]);
                 sd2[j] = -1;
+                strcpy(usedUsernames[j], "");
                 numParticipants--;
             }
-            else if (message[0] == '@') {
-                sendPrivate(message);
+            else if (message[0] == '@') {//private message
+                sendPrivate(message, usedUsernames);
+            }
+            else {//public message
+              message = publicMessage(message, username);
+              messageLen = strlen(message);
+              //send to observers
+                //send(sd, &messageLen, sizeof(messageLen), 0);
+                //send(sd, message, messageLen, 0);
+
+
             }
         }
     }
 
 }
 printf("Closing connection\n");
-close(sd2[0]);
-sd2[0] = -1;
-numParticipants--;
+for (int i = 0; i<255; i++) {
+  close(sd2[i]);
+  sd2[i] = -1;
+  strcpy(usedUsernames[i], "");
+  numParticipants--;
+}
 }
