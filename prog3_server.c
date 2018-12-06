@@ -15,8 +15,10 @@
 
 #define QLEN 6 /* size of request queue */
 #define MAX_LENGTH 1000 //max msg len
-#define MAX_PARTICIPANTS 255 //max participants
+#define MAX_PARTICIPANTS 255 //max clients
+#define MAX_OBSERVERS 255
 int numParticipants = 0; /* counts client connections */
+int numObservers = 0;
 
 /*------------------------------------------------------------------------
 * Program: demo_server
@@ -126,11 +128,15 @@ int addUsername (char usedNames[255][11], char *username, int i) {
 
 }
 
-int resetFDSet(fd_set *readfds, int sd[255], int sdl) {
+int resetFDSet(fd_set *readfds, int sd[255], int sdPart, int sdObs) {
     //printf("inside reset fds function\n");
     FD_ZERO(readfds);
-    FD_SET(sdl, readfds);
-    int maxsd = sdl;
+    FD_SET(sdPart, readfds);
+    FD_SET(sdObs, readfds);
+    int maxsd = sdPart;
+    if (sdObs>sdPart){
+      maxsd=sdObs;
+    }
     for (int i=0; i<255; i++) {
         if (sd[i] != -1) {
             printf("sd %d in use\n", i);
@@ -211,7 +217,7 @@ int main(int argc, char **argv) {
     struct protoent *ptrp; /* pointer to a protocol table entry */
     struct sockaddr_in sad_p, sad_o; /* structure to hold server's address */
     struct sockaddr_in cad; /* structure to hold client's address */
-    int sd_p, sd_o, sd2[255]; /* socket descriptors */
+    int sd_p, sd_o, sd2[255], sd3[255]; /* socket descriptors */
     int port_p, port_o; /* protocol port number */
     socklen_t alen; /* length of address */
     int optval = 1; /* boolean value when we set socket option */
@@ -229,6 +235,7 @@ int main(int argc, char **argv) {
 
     for (int i=0; i<255; i++) {
         sd2[i] = -1;
+        sd3[i] = -1;
     }
 
     fd_set readfds;
@@ -337,6 +344,7 @@ int main(int argc, char **argv) {
     }
 
     int i;
+    int o;
     // Init active usernames array
     initUsernames(usedUsernames);
 
@@ -348,12 +356,17 @@ int main(int argc, char **argv) {
             if (sd2[i]==-1) {
                 break;
             }
-
         }
-        printf("next open ind = %d\n", i);
+        for (o=0; o<255; o++) {
+            if (sd3[o]==-1) {
+                break;
+            }
+        }
+        printf("next open p ind = %d\n", i);
+        printf("next open o ind = %d\n", o);
 
         alen = sizeof(cad);
-        sock = resetFDSet(&readfds, sd2, sd_p);
+        sock = resetFDSet(&readfds, sd2, sd_p, sd_o);
         //printf("sock = %d\n", sock);
         rv = select(sock, &readfds, NULL, NULL, NULL);
         if (rv == -1) {
@@ -363,9 +376,26 @@ int main(int argc, char **argv) {
         //printf("after select\n");
 
         // Accept client connections
-
+        if (FD_ISSET(sd_o, &readfds)) {
+          printf("running accept observer\n");
+          if ((sd3[o] = accept(sd_o, (struct sockaddr *)&cad, &alen)) < 0) {
+              perror("accept");
+              exit(EXIT_FAILURE);
+          }
+          if (numObservers+1 >= MAX_OBSERVERS) {
+              printf("numO = %d, no room\n", numObservers);
+              send(sd3[o], &n, 1, 0);
+              close(sd3[o]);
+              sd3[o] = -1;
+              continue;
+          }
+          numObservers++;
+          // Check for valid active participant
+          send(sd3[o], &y, 1, 0);
+          printf("Observer sd[%d] added\n", o);
+        }
         if (FD_ISSET(sd_p, &readfds)) {
-            printf("running accept\n");
+            printf("running accept participant\n");
             if ((sd2[i] = accept(sd_p, (struct sockaddr *)&cad, &alen)) < 0) {
                 perror("accept");
                 exit(EXIT_FAILURE);

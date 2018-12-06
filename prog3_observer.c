@@ -132,6 +132,7 @@ int main( int argc, char **argv) {
   // Check if theres room for another connection
   printf("waiting for server response\n");
   recv(sd, &letter, 1, 0);
+  printf("received letter %c\n", letter);
   if (letter == 'Y') {
     activeState = 0;
     //prompt input
