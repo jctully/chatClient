@@ -1,15 +1,16 @@
 /* demo_server.c - code for example server program that uses TCP */
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <unistd.h>
+
+#include <netdb.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/select.h>
 
@@ -37,7 +38,7 @@ int numObservers = 0;
 */
 
 int fullRead(int sd, char* message) {
-  int rv;
+    int rv;
     uint16_t messageLen = 0;
 
     if ((rv = recv(sd, &messageLen, sizeof(messageLen), 0)) <0) {
@@ -213,14 +214,66 @@ void leaveMessage(char *buf, char *username) {
   printf("leavemsg = .%s.\n", buf);
 }
 
-int main(int argc, char **argv) {
+void setupSocket(int *sd, int port, struct sockaddr_in *sad) {
     struct protoent *ptrp; /* pointer to a protocol table entry */
+    int optval = 1; /* boolean value when we set socket option */
+    int on = 1, rv;
+    memset((char *)sad,0,sizeof(*sad)); /* clear sockaddr structure */
+
+    sad->sin_family = AF_INET;
+
+    sad->sin_addr.s_addr = INADDR_ANY;
+    if (port > 0) { /* test for illegal value */
+        sad->sin_port = htons(port);
+    } else { /* print error message and exit */
+        fprintf(stderr,"Error: Bad port number %d\n",port);
+        exit(EXIT_FAILURE);
+    }
+
+    /* Map TCP transport protocol name to protocol number */
+    if ( ((long int)(ptrp = getprotobyname("tcp"))) == 0) {
+        fprintf(stderr, "Error: Cannot map \"tcp\" to protocol number");
+        exit(EXIT_FAILURE);
+    }
+
+    *sd = socket(AF_INET, SOCK_STREAM, ptrp->p_proto);
+    if (*sd < 0) {
+        fprintf(stderr, "Error: Socket creation failed\n");
+        exit(EXIT_FAILURE);
+    }
+
+    /* Allow reuse of port - avoid "Bind failed" issues */
+    if( setsockopt(*sd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0 ) {
+        fprintf(stderr, "Error Setting socket option failed\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (bind(*sd, (struct sockaddr*) sad, sizeof(*sad)) < 0) {
+        fprintf(stderr,"Error: Bind failed\n");
+        exit(EXIT_FAILURE);
+    }
+
+    /* Makes sd (and children) nonblocking sockets*/
+    rv = ioctl(*sd, FIONBIO, (char *)&on);
+    if (rv < 0)
+    {
+        perror("ioctl() failed");
+        close(*sd);
+        exit(EXIT_FAILURE);
+    }
+
+    if (listen(*sd, QLEN) < 0) {
+        fprintf(stderr,"Error: Listen failed\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+int main(int argc, char **argv) {
     struct sockaddr_in sad_p, sad_o; /* structure to hold server's address */
     struct sockaddr_in cad; /* structure to hold client's address */
     int sd_p, sd_o, sd2[255], sd3[255]; /* socket descriptors */
     int port_p, port_o; /* protocol port number */
     socklen_t alen; /* length of address */
-    int optval = 1; /* boolean value when we set socket option */
     char buf[1000]; /* buffer for string the server sends */
     char n = 'N', y = 'Y', t='T', invalid = 'I';
 
@@ -229,9 +282,8 @@ int main(int argc, char **argv) {
     struct timespec start, end;
     double timeDiff = 0;
     char usedUsernames[255][11];
-    uint16_t messageLen;
+    //uint16_t messageLen;
     int rv, sock;
-    int on = 1;
 
     for (int i=0; i<255; i++) {
         sd2[i] = -1;
@@ -251,97 +303,8 @@ int main(int argc, char **argv) {
     port_p = atoi(argv[1]);
     port_o = atoi(argv[2]);
 
-    memset((char *)&sad_p,0,sizeof(sad_p)); /* clear sockaddr structure */
-    memset((char *)&sad_p,0,sizeof(sad_o));
-
-    //TODO: Set socket family to AF_INET
-    sad_p.sin_family = AF_INET;
-    sad_o.sin_family = AF_INET;
-
-    //TODO: Set local IP address to listen to all IP addresses this server can assume. You can do it by using INADDR_ANY
-    sad_p.sin_addr.s_addr = INADDR_ANY;
-    if (port_p > 0) { /* test for illegal value */
-        //TODO: set port number. The data type is u_short
-        sad_p.sin_port = htons(port_p);
-    } else { /* print error message and exit */
-        fprintf(stderr,"Error: Bad port number %d\n",port_p);
-        exit(EXIT_FAILURE);
-    }
-
-    sad_o.sin_addr.s_addr = INADDR_ANY;
-    if (port_o > 0) { /* test for illegal value */
-        //TODO: set port number. The data type is u_short
-        sad_o.sin_port = htons(port_o);
-    } else { /* print error message and exit */
-        fprintf(stderr,"Error: Bad port number %d\n",port_o);
-        exit(EXIT_FAILURE);
-    }
-
-    /* Map TCP transport protocol name to protocol number */
-    if ( ((long int)(ptrp = getprotobyname("tcp"))) == 0) {
-        fprintf(stderr, "Error: Cannot map \"tcp\" to protocol number");
-        exit(EXIT_FAILURE);
-    }
-
-    /* TODO: Create a socket with AF_INET as domain, protocol type as SOCK_STREAM, and protocol as ptrp->p_proto. This call returns a socket descriptor named sd. */
-    sd_p = socket(AF_INET, SOCK_STREAM, ptrp->p_proto);
-    if (sd_p < 0) {
-        fprintf(stderr, "Error: Socket creation failed\n");
-        exit(EXIT_FAILURE);
-    }
-
-    sd_o = socket(AF_INET, SOCK_STREAM, ptrp->p_proto);
-    if (sd_o < 0) {
-        fprintf(stderr, "Error: Socket creation failed\n");
-        exit(EXIT_FAILURE);
-    }
-
-    /* Allow reuse of port - avoid "Bind failed" issues */
-    if( setsockopt(sd_p, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0 ) {
-        fprintf(stderr, "Error Setting socket option failed\n");
-        exit(EXIT_FAILURE);
-    }
-    /* Allow reuse of port - avoid "Bind failed" issues */
-    if( setsockopt(sd_o, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0 ) {
-        fprintf(stderr, "Error Setting socket option failed\n");
-        exit(EXIT_FAILURE);
-    }
-
-    /* TODO: Bind a local address to the socket. For this, you need to pass correct parameters to the bind function. */
-    if (bind(sd_p, (struct sockaddr*) &sad_p, sizeof(sad_p)) < 0) {
-        fprintf(stderr,"Error: Bind failed\n");
-        exit(EXIT_FAILURE);
-    }
-    if (bind(sd_o, (struct sockaddr*) &sad_o, sizeof(sad_o)) < 0) {
-        fprintf(stderr,"Error: Bind failed\n");
-        exit(EXIT_FAILURE);
-    }
-
-    /* Makes sd (and children) nonblocking sockets*/
-    rv = ioctl(sd_p, FIONBIO, (char *)&on);
-    if (rv < 0)
-    {
-        perror("ioctl() failed");
-        close(sd_p);
-        exit(EXIT_FAILURE);
-    }
-    rv = ioctl(sd_o, FIONBIO, (char *)&on);
-    if (rv < 0)
-    {
-        perror("ioctl() failed");
-        close(sd_p);
-        exit(EXIT_FAILURE);
-    }
-
-    /* TODO: Specify size of request queue. Listen take 2 parameters -- socket descriptor and QLEN, which has been set at the top of this code. */
-    if (listen(sd_p, QLEN) < 0) {
-        fprintf(stderr,"Error: Listen failed\n");
-        exit(EXIT_FAILURE);
-    }
-    if (listen(sd_o, QLEN) < 0) {
-        fprintf(stderr,"Error: Listen failed\n");
-        exit(EXIT_FAILURE);
-    }
+    setupSocket(&sd_p, port_p, &sad_p);
+    setupSocket(&sd_o, port_o, &sad_o);
 
     int i;
     int o;
@@ -495,7 +458,7 @@ int main(int argc, char **argv) {
 
                     leaveMessage(buf, usedUsernames[j]);
                     strncpy(usedUsernames[j], "", 1);
-                    messageLen = strlen(buf);
+                    //messageLen = strlen(buf);
 
                     //send to observers
                       //send(sd, &messageLen, sizeof(messageLen), 0);
@@ -506,7 +469,7 @@ int main(int argc, char **argv) {
                 else if (message[0] == '@') {//private message
                     //rv = sendPrivate(message, usedUsernames[j], usedUsernames);
                     if (rv==1) {
-                      messageLen = strlen(message);
+                      //messageLen = strlen(message);
                       //send to observers
                         //send(sd, &messageLen, sizeof(messageLen), 0);
                         //send(sd, message, messageLen, 0);
@@ -516,7 +479,7 @@ int main(int argc, char **argv) {
                 else {//public message
                   publicMessage(message, usedUsernames[j]);
                   printf("publicMessage output: \"%s\"\n", message);
-                  messageLen = strlen(message);
+                  //messageLen = strlen(message);
                   //send to observers
                     //send(sd, &messageLen, sizeof(messageLen), 0);
                     //send(sd, message, messageLen, 0);

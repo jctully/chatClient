@@ -1,18 +1,16 @@
-/* demo_client.c - code for example client program that uses TCP */
-
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <ctype.h>
+#include <errno.h>
 
+#include <netdb.h>
+#include <netinet/in.h>
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
-#include <netdb.h>
 #include <sys/ioctl.h>
-#include <errno.h>
 
 #define MAX_LENGTH 1000
 
@@ -121,7 +119,7 @@ int main( int argc, char **argv) {
   }
 
 
-  /* TODO: Connect the socket to the specified server. You have to pass correct parameters to the connect function.*/
+  /* Connect the socket to the specified server.*/
   if (connect(sd, (struct sockaddr*) &sad, sizeof(sad)) < 0) {
     if (errno != EINPROGRESS) {
       perror("connect");
