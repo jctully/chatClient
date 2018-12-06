@@ -67,15 +67,13 @@ int main( int argc, char **argv) {
   int sd; /* socket descriptor */
   int port; /* protocol port number */
   char *host; /* pointer to host name */
-  int n; /* number of characters read */
   char buf[1000]; /* buffer for data from the server */
   uint16_t nameLen;
   uint16_t messageLen;
-  char message[255], *state;
+  char message[255];
   char letter;
-  int on = 1;
-  int sock;
   int rv;
+  int activeState;
 
   fd_set readfds;
   FD_ZERO(&readfds);
@@ -135,24 +133,22 @@ int main( int argc, char **argv) {
   printf("waiting for server response\n");
   recv(sd, &letter, 1, 0);
   if (letter == 'Y') {
-    state = "inac";
+    activeState = 0;
     //prompt input
-    while (state=="inac") {
+    while (activeState==0) {
       printf("Enter your username: ");
       fgets(buf, 255, stdin);
       printf("\n");
       //validate name, timer
       nameLen = strlen(buf);
-      printf("len = %d, name = .%s.\n", nameLen, buf);
       //nameLen = htons(nameLen);
       send(sd, &nameLen, sizeof(nameLen), 0);
       send(sd, buf, nameLen, 0);
-      printf("username sent\n");
 
       recv(sd, &letter, sizeof(letter), 0);
-      printf("Read letter: %c\n", letter);
+      //printf("Read letter: %c\n", letter);
       if(letter == 'Y') {
-        state = "ac";
+        activeState = 1;
       }
       else if (letter == 'T') {
         printf("Username taken.\n");

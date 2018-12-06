@@ -4,12 +4,19 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <ctype.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <sys/ioctl.h>
+#include <errno.h>
+
+#define MAX_LENGTH 1000
+
+
 
 /*------------------------------------------------------------------------
 * Program: demo_client
@@ -24,80 +31,161 @@
 *------------------------------------------------------------------------
 */
 
-char* blockingRead(int sd, char* buffer, int length) {
-	int n =  recv(sd, buffer, length, 0);
-	while (n < length) {
-		n +=  recv(sd, buffer, length - n, 0);
-	}
-	return buffer;
+void fullRead(int sd, char* buffer, int length) {
+  int m;
+  int n =  recv(sd, buffer, length, 0);
+  if (n<0) {
+    perror("recv");
+    exit(EXIT_FAILURE);
+  }
+  while (n < length) {
+    m =  recv(sd, buffer, length - n, 0);
+    if (m<0) {
+      perror("recv");
+      exit(EXIT_FAILURE);
+    }
+    n += m;
+  }
+  buffer[length] = '\0';
+}
+
+//0 if non-whitespace characters present, else 1
+int whitespace(const char *str) {
+  while (*str != '\0') {
+    if (!isspace((unsigned char)*str)) {
+      return 0;
+    }
+    str++;
+  }
+  return 1;
 }
 
 int main( int argc, char **argv) {
-	struct hostent *ptrh; /* pointer to a host table entry */
-	struct protoent *ptrp; /* pointer to a protocol table entry */
-	struct sockaddr_in sad; /* structure to hold an IP address */
-	int sd; /* socket descriptor */
-	int port; /* protocol port number */
-	char *host; /* pointer to host name */
-	int n; /* number of characters read */
-	char buf[1000]; /* buffer for data from the server */
+  struct hostent *ptrh; /* pointer to a host table entry */
+  struct protoent *ptrp; /* pointer to a protocol table entry */
+  struct sockaddr_in sad; /* structure to hold an IP address */
+  int sd; /* socket descriptor */
+  int port; /* protocol port number */
+  char *host; /* pointer to host name */
+  char buf[1000]; /* buffer for data from the server */
+  uint16_t nameLen;
+  uint16_t messageLen;
+  char message[255];
+  char letter;
+  int rv;
+  int activeState;
 
-	memset((char *)&sad,0,sizeof(sad)); /* clear sockaddr structure */
-	sad.sin_family = AF_INET; /* set family to Internet */
+  fd_set readfds;
+  FD_ZERO(&readfds);
 
-	if( argc != 3 ) {
-		fprintf(stderr,"Error: Wrong number of arguments\n");
-		fprintf(stderr,"usage:\n");
-		fprintf(stderr,"./client server_address server_port\n");
-		exit(EXIT_FAILURE);
-	}
+  memset((char *)&sad,0,sizeof(sad)); /* clear sockaddr structure */
+  sad.sin_family = AF_INET; /* set family to Internet */
 
-	port = atoi(argv[2]); /* convert to binary */
-	if (port > 0) /* test for legal value */
-		sad.sin_port = htons((u_short)port);
-	else {
-		fprintf(stderr,"Error: bad port number %s\n",argv[2]);
-		exit(EXIT_FAILURE);
-	}
+  if( argc != 3 ) {
+    fprintf(stderr,"Error: Wrong number of arguments\n");
+    fprintf(stderr,"usage:\n");
+    fprintf(stderr,"./client server_address server_port\n");
+    exit(EXIT_FAILURE);
+  }
 
-	host = argv[1]; /* if host argument specified */
+  port = atoi(argv[2]); /* convert to binary */
+  if (port > 0) /* test for legal value */
+  sad.sin_port = htons((u_short)port);
+  else {
+    fprintf(stderr,"Error: bad port number %s\n",argv[2]);
+    exit(EXIT_FAILURE);
+  }
 
-	/* Convert host name to equivalent IP address and copy to sad. */
-	ptrh = gethostbyname(host);
-	if ( ptrh == NULL ) {
-		fprintf(stderr,"Error: Invalid host: %s\n", host);
-		exit(EXIT_FAILURE);
-	}
+  host = argv[1]; /* if host argument specified */
 
-	memcpy(&sad.sin_addr, ptrh->h_addr, ptrh->h_length);
+  /* Convert host name to equivalent IP address and copy to sad. */
+  ptrh = gethostbyname(host);
+  if ( ptrh == NULL ) {
+    fprintf(stderr,"Error: Invalid host: %s\n", host);
+    exit(EXIT_FAILURE);
+  }
 
-	/* Map TCP transport protocol name to protocol number. */
-	if ( ((long int)(ptrp = getprotobyname("tcp"))) == 0) {
-		fprintf(stderr, "Error: Cannot map \"tcp\" to protocol number");
-		exit(EXIT_FAILURE);
-	}
+  memcpy(&sad.sin_addr, ptrh->h_addr, ptrh->h_length);
 
-	/* Create a socket. */
-	sd = socket(PF_INET, SOCK_STREAM, ptrp->p_proto);
-	if (sd < 0) {
-		fprintf(stderr, "Error: Socket creation failed\n");
-		exit(EXIT_FAILURE);
-	}
+  /* Map TCP transport protocol name to protocol number. */
+  if ( ((long int)(ptrp = getprotobyname("tcp"))) == 0) {
+    fprintf(stderr, "Error: Cannot map \"tcp\" to protocol number");
+    exit(EXIT_FAILURE);
+  }
 
-	/* TODO: Connect the socket to the specified server. You have to pass correct parameters to the connect function.*/
-	if (connect(sd, (struct sockaddr*) &sad, sizeof(sad)) < 0) {
-		fprintf(stderr,"connect failed\n");
-		exit(EXIT_FAILURE);
-	}
+  /* Create a socket. */
+  sd = socket(PF_INET, SOCK_STREAM, ptrp->p_proto);
+  if (sd < 0) {
+    fprintf(stderr, "Error: Socket creation failed\n");
+    exit(EXIT_FAILURE);
+  }
 
-	/* Repeatedly read data from socket and write to user's screen. */
-	n = recv(sd, buf, sizeof(buf), 0);
-	while (n > 0) {
-		write(1,buf,n);
-		n = recv(sd, buf, sizeof(buf), 0);
-	}
 
-	close(sd);
+  /* TODO: Connect the socket to the specified server. You have to pass correct parameters to the connect function.*/
+  if (connect(sd, (struct sockaddr*) &sad, sizeof(sad)) < 0) {
+    if (errno != EINPROGRESS) {
+      perror("connect");
+      exit(EXIT_FAILURE);
+    }
+  }
 
-	exit(EXIT_SUCCESS);
+  // Check if theres room for another connection
+  printf("waiting for server response\n");
+  recv(sd, &letter, 1, 0);
+  if (letter == 'Y') {
+    activeState = 0;
+    //prompt input
+    while (activeState==0) {
+      printf("Enter your affiliate: ");
+      fgets(buf, 255, stdin);
+      printf("\n");
+      //validate name, timer
+      nameLen = strlen(buf);
+      //nameLen = htons(nameLen);
+      send(sd, &nameLen, sizeof(nameLen), 0);
+      send(sd, buf, nameLen, 0);
+
+      recv(sd, &letter, sizeof(letter), 0);
+      //printf("Read letter: %c\n", letter);
+      if(letter == 'Y') {
+        activeState = 1;
+      }
+      else if (letter == 'T') {
+        printf("Username taken.\n");
+      }
+      else if (letter == 'I') {
+        printf("Username invalid.\n");
+      }
+    }//end inac state
+
+    while(1) {//message loop
+      printf("Enter message: ");
+      fgets(message, 255, stdin);
+      messageLen = strlen(message);
+      //validate
+      rv = whitespace(message);
+      if (rv==1) {
+        printf("Message can't be all whitespace.\n");
+        continue;
+      }
+      send(sd, &messageLen, sizeof(messageLen), 0);
+      send(sd, message, messageLen, 0);
+      //printf("message sent: \"%s\"\n", message);
+      if (strlen(message) > MAX_LENGTH) {
+        printf("Message too long. ");
+        break;
+      }
+      if (strcmp("quit\n", message) == 0) {
+        printf("Quit received. ");
+        break;
+      }
+    } //end message loop
+
+  } else if (letter=='N') {
+    printf("Server full. ");
+  }
+  printf("Closing connection\n");
+  close(sd);
+
+  exit(EXIT_SUCCESS);
 }

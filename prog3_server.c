@@ -38,7 +38,7 @@ int fullRead(int sd, char* message) {
   int rv;
     uint16_t messageLen = 0;
 
-    if (rv = recv(sd, &messageLen, sizeof(messageLen), 0) <0) {
+    if ((rv = recv(sd, &messageLen, sizeof(messageLen), 0)) <0) {
       perror("recv");
       exit(EXIT_FAILURE);
     }
@@ -50,7 +50,7 @@ int fullRead(int sd, char* message) {
     }
     //printf("converetd len %d\n", messageLen);
 
-    if (rv = recv(sd, message, messageLen, 0) <0) {
+    if ((rv = recv(sd, message, messageLen, 0)) <0) {
       perror("recv");
       exit(EXIT_FAILURE);
     }
@@ -73,9 +73,8 @@ void listUsernames(char usedNames[255][11]) {
 }
 
 void initUsernames(char usedNames[255][11]) {
-    char blank = '\0';
     for(int i = 0; i < 255; i++) {
-        strcpy(usedNames[i], &blank);
+        strncpy(usedNames[i], "", 1);
     }
 }
 
@@ -93,7 +92,7 @@ int checkUsername(char usedNames[255][11], char *username) {
     int i = 0;
     while(*cur && i < 11) {
         if(isalnum(*cur) || *cur == '_') {
-            *cur++;
+            cur++;
         } else {
             return 0;
         }
@@ -121,14 +120,14 @@ int addUsername (char usedNames[255][11], char *username, int i) {
           return 1;
       }
   } */
-  strcpy(usedNames[i], username);
+  strncpy(usedNames[i], username, 11);
 
   return 1;
 
 }
 
 int resetFDSet(fd_set *readfds, int sd[255], int sdl) {
-    printf("inside reset fds function\n");
+    //printf("inside reset fds function\n");
     FD_ZERO(readfds);
     FD_SET(sdl, readfds);
     int maxsd = sdl;
@@ -144,7 +143,7 @@ int resetFDSet(fd_set *readfds, int sd[255], int sdl) {
     return ++maxsd;
 }
 
-int sendPrivate(char *message, char *sender, char usedUsernames[255][11]) {
+/* int sendPrivate(char *message, char *sender, char usedUsernames[255][11]) {
     printf("sending private\n");
     char *username, *token;
     char temp[1000];
@@ -153,7 +152,7 @@ int sendPrivate(char *message, char *sender, char usedUsernames[255][11]) {
     const char delim2 = '\0';
     int rv;
 
-    strcpy(username, strtok(message, &delim));
+    strncpy(sender, strtok(message, &delim), 11);
     ++username;
     //printf("user = .%s.\n", username);
 
@@ -165,7 +164,7 @@ int sendPrivate(char *message, char *sender, char usedUsernames[255][11]) {
     }
 
     token = strtok(NULL, &delim2);
-    strcpy(message, token);
+    strncpy(message, token, strlen(token));
 
     //prepend
     int j=strlen(sender)-1;
@@ -175,15 +174,15 @@ int sendPrivate(char *message, char *sender, char usedUsernames[255][11]) {
       }
       j--;
     }
-    strcpy(temp, privateMessage);
-    strcpy(&temp[14], message);
-    strcpy(message, temp);
+    strncpy(temp, privateMessage, 14);
+    strncpy(&temp[14], message, 986);
+    strncpy(message, temp, 1000);
     printf("message = .%s.\n", message);
 
     return 1;
 
 
-}
+} */
 
 void publicMessage(char *message, char *username) {
   char temp[1000];
@@ -196,36 +195,35 @@ void publicMessage(char *message, char *username) {
     }
     j--;
   }
-  strcpy(temp, publicMessage);
-  strcpy(&temp[14], message);
-  strcpy(message, temp);
+  strncpy(temp, publicMessage, 14);
+  strncpy(&temp[14], message, 986);
+  strncpy(message, temp, 1000);
 }
 
 void leaveMessage(char *buf, char *username) {
   char* left = " has left";
-  strcpy(buf, username);
-  strcpy(&buf[strlen(username)], left);
+  strncpy(buf, username, 11);
+  strncpy(&buf[strlen(username)], left, 10);
   printf("leavemsg = .%s.\n", buf);
 }
 
 int main(int argc, char **argv) {
     struct protoent *ptrp; /* pointer to a protocol table entry */
-    struct sockaddr_in sad; /* structure to hold server's address */
+    struct sockaddr_in sad_p, sad_o; /* structure to hold server's address */
     struct sockaddr_in cad; /* structure to hold client's address */
-    int sd, sdt, sd2[255]; /* socket descriptors */
-    int port; /* protocol port number */
-    int alen; /* length of address */
+    int sd_p, sd_o, sd2[255]; /* socket descriptors */
+    int port_p, port_o; /* protocol port number */
+    socklen_t alen; /* length of address */
     int optval = 1; /* boolean value when we set socket option */
     char buf[1000]; /* buffer for string the server sends */
-    char n = 'N', y = 'Y', t='T', invalid = 'I', *token;
-    char privateMessage[14] = "-           : ";
+    char n = 'N', y = 'Y', t='T', invalid = 'I';
 
     char username[11];
     char message[MAX_LENGTH];
     struct timespec start, end;
     double timeDiff = 0;
     char usedUsernames[255][11];
-    uint16_t nameLen, messageLen;
+    uint16_t messageLen;
     int rv, sock;
     int on = 1;
 
@@ -243,22 +241,32 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
 
-    int pPort = atoi(argv[1]);
-    int oPort = atoi(argv[2]);
+    port_p = atoi(argv[1]);
+    port_o = atoi(argv[2]);
 
-    memset((char *)&sad,0,sizeof(sad)); /* clear sockaddr structure */
+    memset((char *)&sad_p,0,sizeof(sad_p)); /* clear sockaddr structure */
+    memset((char *)&sad_p,0,sizeof(sad_o));
 
     //TODO: Set socket family to AF_INET
-    sad.sin_family = AF_INET;
+    sad_p.sin_family = AF_INET;
+    sad_o.sin_family = AF_INET;
 
     //TODO: Set local IP address to listen to all IP addresses this server can assume. You can do it by using INADDR_ANY
-    sad.sin_addr.s_addr = INADDR_ANY;
-    port = atoi(argv[1]); /* convert argument to binary */
-    if (port > 0) { /* test for illegal value */
+    sad_p.sin_addr.s_addr = INADDR_ANY;
+    if (port_p > 0) { /* test for illegal value */
         //TODO: set port number. The data type is u_short
-        sad.sin_port = htons(port);
+        sad_p.sin_port = htons(port_p);
     } else { /* print error message and exit */
-        fprintf(stderr,"Error: Bad port number %s\n",argv[1]);
+        fprintf(stderr,"Error: Bad port number %d\n",port_p);
+        exit(EXIT_FAILURE);
+    }
+
+    sad_o.sin_addr.s_addr = INADDR_ANY;
+    if (port_o > 0) { /* test for illegal value */
+        //TODO: set port number. The data type is u_short
+        sad_o.sin_port = htons(port_o);
+    } else { /* print error message and exit */
+        fprintf(stderr,"Error: Bad port number %d\n",port_o);
         exit(EXIT_FAILURE);
     }
 
@@ -269,35 +277,61 @@ int main(int argc, char **argv) {
     }
 
     /* TODO: Create a socket with AF_INET as domain, protocol type as SOCK_STREAM, and protocol as ptrp->p_proto. This call returns a socket descriptor named sd. */
-    sd = socket(AF_INET, SOCK_STREAM, ptrp->p_proto);
-    if (sd < 0) {
+    sd_p = socket(AF_INET, SOCK_STREAM, ptrp->p_proto);
+    if (sd_p < 0) {
+        fprintf(stderr, "Error: Socket creation failed\n");
+        exit(EXIT_FAILURE);
+    }
+
+    sd_o = socket(AF_INET, SOCK_STREAM, ptrp->p_proto);
+    if (sd_o < 0) {
         fprintf(stderr, "Error: Socket creation failed\n");
         exit(EXIT_FAILURE);
     }
 
     /* Allow reuse of port - avoid "Bind failed" issues */
-    if( setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0 ) {
+    if( setsockopt(sd_p, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0 ) {
+        fprintf(stderr, "Error Setting socket option failed\n");
+        exit(EXIT_FAILURE);
+    }
+    /* Allow reuse of port - avoid "Bind failed" issues */
+    if( setsockopt(sd_o, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) < 0 ) {
         fprintf(stderr, "Error Setting socket option failed\n");
         exit(EXIT_FAILURE);
     }
 
     /* TODO: Bind a local address to the socket. For this, you need to pass correct parameters to the bind function. */
-    if (bind(sd, (struct sockaddr*) &sad, sizeof(sad)) < 0) {
+    if (bind(sd_p, (struct sockaddr*) &sad_p, sizeof(sad_p)) < 0) {
+        fprintf(stderr,"Error: Bind failed\n");
+        exit(EXIT_FAILURE);
+    }
+    if (bind(sd_o, (struct sockaddr*) &sad_o, sizeof(sad_o)) < 0) {
         fprintf(stderr,"Error: Bind failed\n");
         exit(EXIT_FAILURE);
     }
 
     /* Makes sd (and children) nonblocking sockets*/
-    rv = ioctl(sd, FIONBIO, (char *)&on);
+    rv = ioctl(sd_p, FIONBIO, (char *)&on);
     if (rv < 0)
     {
         perror("ioctl() failed");
-        close(sd);
+        close(sd_p);
+        exit(EXIT_FAILURE);
+    }
+    rv = ioctl(sd_o, FIONBIO, (char *)&on);
+    if (rv < 0)
+    {
+        perror("ioctl() failed");
+        close(sd_p);
         exit(EXIT_FAILURE);
     }
 
     /* TODO: Specify size of request queue. Listen take 2 parameters -- socket descriptor and QLEN, which has been set at the top of this code. */
-    if (listen(sd, QLEN) < 0) {
+    if (listen(sd_p, QLEN) < 0) {
+        fprintf(stderr,"Error: Listen failed\n");
+        exit(EXIT_FAILURE);
+    }
+    if (listen(sd_o, QLEN) < 0) {
         fprintf(stderr,"Error: Listen failed\n");
         exit(EXIT_FAILURE);
     }
@@ -319,8 +353,8 @@ int main(int argc, char **argv) {
         printf("next open ind = %d\n", i);
 
         alen = sizeof(cad);
-        sock = resetFDSet(&readfds, sd2, sd);
-        printf("sock = %d\n", sock);
+        sock = resetFDSet(&readfds, sd2, sd_p);
+        //printf("sock = %d\n", sock);
         rv = select(sock, &readfds, NULL, NULL, NULL);
         if (rv == -1) {
             perror("select"); // error occurred in select()
@@ -330,9 +364,9 @@ int main(int argc, char **argv) {
 
         // Accept client connections
 
-        if (FD_ISSET(sd, &readfds)) {
+        if (FD_ISSET(sd_p, &readfds)) {
             printf("running accept\n");
-            if ((sd2[i] = accept(sd, (struct sockaddr *)&cad, &alen)) < 0) {
+            if ((sd2[i] = accept(sd_p, (struct sockaddr *)&cad, &alen)) < 0) {
                 perror("accept");
                 exit(EXIT_FAILURE);
             }
@@ -395,7 +429,7 @@ int main(int argc, char **argv) {
                 printf("Client took too long, closing connection.\n");
                 close(sd2[i]);
                 sd2[i]=-1;
-                strcpy(usedUsernames[i], "");
+                strncpy(usedUsernames[i], "", 1);
                 numParticipants--;
                 continue;
             }
@@ -418,11 +452,11 @@ int main(int argc, char **argv) {
                     printf("Message too long, closing connection sd[%d]\n", j);
                     close(sd2[j]);
                     sd2[j] = -1;
-                    strcpy(usedUsernames[j], "");
+                    strncpy(usedUsernames[j], "", 1);
                     numParticipants--;
                     break;
                 }
-                printf("terminated message: .%s.\n", message);
+                //printf("terminated message: .%s.\n", message);
                 if (strcmp("quit", message) == 0 || rv==-2) {
                     printf("Quit received, closing connection sd[%d]\n", j);
                     close(sd2[j]);
@@ -430,7 +464,7 @@ int main(int argc, char **argv) {
                     numParticipants--;
 
                     leaveMessage(buf, usedUsernames[j]);
-                    strcpy(usedUsernames[j], "");
+                    strncpy(usedUsernames[j], "", 1);
                     messageLen = strlen(buf);
 
                     //send to observers
@@ -440,7 +474,7 @@ int main(int argc, char **argv) {
 
                 }
                 else if (message[0] == '@') {//private message
-                    rv = sendPrivate(message, usedUsernames[j], usedUsernames);
+                    //rv = sendPrivate(message, usedUsernames[j], usedUsernames);
                     if (rv==1) {
                       messageLen = strlen(message);
                       //send to observers
@@ -466,7 +500,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i<255; i++) {
       close(sd2[i]);
       sd2[i] = -1;
-      strcpy(usedUsernames[i], "");
+      strncpy(usedUsernames[i], "", 1);
       numParticipants--;
     }
 }
