@@ -41,14 +41,27 @@ int numParticipants = 0; /* counts client connections */
 */
 
 int fullRead(int sd, char* message) {
+  int rv;
     uint16_t messageLen = 0;
 
-    recv(sd, &messageLen, sizeof(messageLen), 0);
+    if (rv = recv(sd, &messageLen, sizeof(messageLen), 0) <0) {
+      perror("recv");
+      exit(EXIT_FAILURE);
+    }
+    if (messageLen == 0) {
+        return -2;
+    }
     if (messageLen > MAX_LENGTH) {
         return -1;
     }
     //printf("converetd len %d\n", messageLen);
-    recv(sd, message, messageLen, 0);
+
+    if (rv = recv(sd, message, messageLen, 0) <0) {
+      perror("recv");
+      exit(EXIT_FAILURE);
+    }
+    printf("recv msg .%s.\n", message);
+
     //printf("message: \"%s\"\n", message);
     message[messageLen-1] = '\0';
     return 0;
@@ -137,29 +150,48 @@ int resetFDSet(fd_set *readfds, int sd[255], int sdl) {
     return ++maxsd;
 }
 
-void sendPrivate(char *message, char usedUsernames[255][11]) {
+int sendPrivate(char *message, char *sender, char usedUsernames[255][11]) {
     printf("sending private\n");
-    char *username, *copy, *token;
+    char *username, *token;
+    char temp[1000];
+    char privateMessage[14] = "-           : ";
     const char delim = ' ';
+    const char delim2 = '\0';
     int rv;
 
-    token = strtok(message, &delim);
-    username = token++;
-    printf("user = .%s.\n", username);
+    strcpy(username, strtok(message, &delim));
+    ++username;
+    //printf("user = .%s.\n", username);
+
     //search for username, validate
     rv = checkUsername(usedUsernames, username);
     if (rv >= 0) {
-      printf("Could not find user\n");
+      printf("Could not find user .%s.\n", username);
+      return -1;
     }
 
-    //TODO: pull message from input str
-    message = message + strlen(username);
+    token = strtok(NULL, &delim2);
+    strcpy(message, token);
+
+    //prepend
+    int j=strlen(sender)-1;
+    for (int i=11; i>0; i--) {
+      if (j>=0) {
+        privateMessage[i] = sender[j];
+      }
+      j--;
+    }
+    strcpy(temp, privateMessage);
+    strcpy(&temp[14], message);
+    strcpy(message, temp);
     printf("message = .%s.\n", message);
+
+    return 1;
 
 
 }
 
-char* publicMessage(char *message, char *username) {
+void publicMessage(char *message, char *username) {
   char temp[1000];
   char publicMessage[14] = ">           : ";
 
@@ -172,9 +204,14 @@ char* publicMessage(char *message, char *username) {
   }
   strcpy(temp, publicMessage);
   strcpy(&temp[14], message);
-  printf("publicMessage output: \"%s\"\n", temp);
+  strcpy(message, temp);
+}
 
-  return temp;
+void leaveMessage(char *buf, char *username) {
+  char* left = " has left";
+  strcpy(buf, username);
+  strcpy(&buf[strlen(username)], left);
+  printf("leavemsg = .%s.\n", buf);
 }
 
 int main(int argc, char **argv) {
@@ -279,13 +316,13 @@ int main(int argc, char **argv) {
     initUsernames(usedUsernames);
 
     /* Main server loop - accept and handle requests */
-    while (1) {    const char delim = ' ';
+    while (1) {
 
         //update next open slot
         for (i=0; i<255; i++) {
             if (sd2[i]==-1) {
                 break;
-            }    const char delim = ' ';
+            }
 
         }
         printf("next open ind = %d\n", i);
@@ -325,7 +362,7 @@ int main(int argc, char **argv) {
             if (clock_gettime(CLOCK_REALTIME, &start) == -1)
             {
                 perror("clock gettime");
-                exit(EXIT_FAILURE);    const char delim = ' ';
+                exit(EXIT_FAILURE);
 
             }
             int validName = 0;
@@ -375,14 +412,18 @@ int main(int argc, char **argv) {
 
         } //end if new client
 
-        printf("sd2[0] = %d\n", sd2[0]);
-
+        for (int k=0; k<255; k++) {
+          if (sd2[k]!=-1) {
+              printf("sd2[%d] = %d\n", k, sd2[k]);
+          }
+        }
         // active participant messages
         //printf("Waiting to recv\n");
         for (int j = 0; j<255; j++) {
             if (FD_ISSET(sd2[j], &readfds)) {
                 printf("sd2[%d] set\n", j);
-                if (rv = fullRead(sd2[j], message) < 0) {
+                rv = fullRead(sd2[j], message);
+                if (rv == -1) {
                     printf("Message too long, closing connection sd[%d]\n", j);
                     close(sd2[j]);
                     sd2[j] = -1;
@@ -391,34 +432,50 @@ int main(int argc, char **argv) {
                     break;
                 }
                 printf("terminated message: .%s.\n", message);
-            if (strcmp("quit", message) == 0) {
-                printf("Quit received, closing connection sd[%d]\n", j);
-                close(sd2[j]);
-                sd2[j] = -1;
-                strcpy(usedUsernames[j], "");
-                numParticipants--;
-            }
-            else if (message[0] == '@') {//private message
-                sendPrivate(message, usedUsernames);
-            }
-            else {//public message
-              message = publicMessage(message, username);
-              messageLen = strlen(message);
-              //send to observers
-                //send(sd, &messageLen, sizeof(messageLen), 0);
-                //send(sd, message, messageLen, 0);
+                if (strcmp("quit", message) == 0 || rv==-2) {
+                    printf("Quit received, closing connection sd[%d]\n", j);
+                    close(sd2[j]);
+                    sd2[j] = -1;
+                    numParticipants--;
+
+                    leaveMessage(buf, usedUsernames[j]);
+                    strcpy(usedUsernames[j], "");
+                    messageLen = strlen(buf);
+
+                    //send to observers
+                      //send(sd, &messageLen, sizeof(messageLen), 0);
+                      //send(sd, buf, messageLen, 0);
 
 
+                }
+                else if (message[0] == '@') {//private message
+                    rv = sendPrivate(message, usedUsernames[j], usedUsernames);
+                    if (rv==1) {
+                      messageLen = strlen(message);
+                      //send to observers
+                        //send(sd, &messageLen, sizeof(messageLen), 0);
+                        //send(sd, message, messageLen, 0);
+                    }
+
+                }
+                else {//public message
+                  publicMessage(message, usedUsernames[j]);
+                  printf("publicMessage output: \"%s\"\n", message);
+                  messageLen = strlen(message);
+                  //send to observers
+                    //send(sd, &messageLen, sizeof(messageLen), 0);
+                    //send(sd, message, messageLen, 0);
+
+
+                }
             }
         }
     }
-
-}
-printf("Closing connection\n");
-for (int i = 0; i<255; i++) {
-  close(sd2[i]);
-  sd2[i] = -1;
-  strcpy(usedUsernames[i], "");
-  numParticipants--;
-}
+    printf("Closing connection\n");
+    for (int i = 0; i<255; i++) {
+      close(sd2[i]);
+      sd2[i] = -1;
+      strcpy(usedUsernames[i], "");
+      numParticipants--;
+    }
 }

@@ -4,6 +4,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <ctype.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -46,6 +47,17 @@ void fullRead(int sd, char* buffer, int length) {
     n += m;
   }
   buffer[length] = '\0';
+}
+
+//0 if non-whitespace characters present, else 1
+int whitespace(const char *str) {
+  while (*str != '\0') {
+    if (!isspace((unsigned char)*str)) {
+      return 0;
+    }
+    str++;
+  }
+  return 1;
 }
 
 int main( int argc, char **argv) {
@@ -154,6 +166,12 @@ int main( int argc, char **argv) {
       printf("Enter message: ");
       fgets(message, 255, stdin);
       messageLen = strlen(message);
+      //validate
+      rv = whitespace(message);
+      if (rv==1) {
+        printf("Message can't be all whitespace.\n");
+        continue;
+      }
       send(sd, &messageLen, sizeof(messageLen), 0);
       send(sd, message, messageLen, 0);
       //printf("message sent: \"%s\"\n", message);
