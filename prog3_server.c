@@ -13,12 +13,6 @@
 #include <sys/ioctl.h>
 #include <sys/select.h>
 
-struct Trie *getNewTrieNode();
-void insert(struct Trie **head, char *str);
-int search(struct Trie *head, char *str);
-int haveChildren(struct Trie *curr);
-int deletion(struct Trie **curr, char *str);
-
 #define QLEN 6 /* size of request queue */
 #define MAX_LENGTH 1000 //max msg len
 #define MAX_PARTICIPANTS 255 //max participants
@@ -234,7 +228,6 @@ int main(int argc, char **argv) {
     uint16_t nameLen, messageLen;
     int rv, sock;
     int on = 1;
-    struct Trie *activeUsers;;;
 
     for (int i=0; i<255; i++) {
         sd2[i] = -1;
@@ -242,8 +235,6 @@ int main(int argc, char **argv) {
 
     fd_set readfds;
     FD_ZERO(&readfds);
-
-    activeUsers = getNewTrieNode();
 
     if( argc != 3 ) {
         fprintf(stderr,"Error: Wrong number of arguments\n");
