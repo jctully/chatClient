@@ -172,12 +172,32 @@ char* getPrivateUsername(char* message) {
   return realUser;
 }
 
+int findParticipantIndex(char *username, char usedUsernames[255][11]) {
+    for(int i = 0; i < 255; i++) {
+        //printf("cmp %s and %s\n", username, usedUsernames[i]);
+        if(strcmp(username, usedUsernames[i]) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int findParticipantOfObserver(int j, int observerMap[]) {
+    for(int i = 0; i < 255; i++) {
+      if (observerMap[i] == j) {
+        return i;
+      }
+    }
+    return -1;
+
+}
+
+
  int sendPrivate(char *message, char *sender, char usedUsernames[255][11], int sd[], int observerMap[]) {
     printf("sending private\n");
-    char username[11], *realUser, *token;
+    char *realUser, *token;
     char temp[1000];
     char privateMessage[14] = "-           : ";
-    const char delim = ' ';
     const char delim2 = '\0';
     int rv;
     uint16_t messageLen;
@@ -310,15 +330,6 @@ void setupSocket(int *sd, int port, struct sockaddr_in *sad) {
     }
 }
 
-int findParticipantIndex(char *username, char usedUsernames[255][11]) {
-    for(int i = 0; i < 255; i++) {
-        //printf("cmp %s and %s\n", username, usedUsernames[i]);
-        if(strcmp(username, usedUsernames[i]) == 0) {
-            return i;
-        }
-    }
-    return -1;
-}
 
 int main(int argc, char **argv) {
     struct sockaddr_in sad_p, sad_o; /* structure to hold server's address */
@@ -336,14 +347,18 @@ int main(int argc, char **argv) {
     double timeDiff = 0;
     char usedUsernames[255][11];
     int rv, sock;
-    int active[255];
-    uint16_t messageLen;
-    int observerMap[255] = { -1 };
+    int activeP[255];
+    int activeO[255];
+
+    //uint16_t messageLen;
+    int observerMap[255];
 
     for (int i=0; i<255; i++) {
         sd2[i] = -1;
         sd3[i] = -1;
         observerMap[i] = -1;
+        activeP[i] = -1;
+        activeO[i] = -1;
     }
 
     fd_set readfds;
@@ -411,6 +426,8 @@ int main(int argc, char **argv) {
           }
           numObservers++;
           send(sd3[o], &y, 1, 0);
+          activeO[o] = 0;
+
           printf("Observer sd[%d] added\n", o);
 
           // Start timer
@@ -441,6 +458,7 @@ int main(int argc, char **argv) {
             numParticipants++;
             // Check for valid active participant
             send(sd2[i], &y, 1, 0);
+            activeP[i] = 0;
 
             // Start timer
             if (clock_gettime(CLOCK_REALTIME, &startP[i]) == -1)
@@ -467,7 +485,7 @@ int main(int argc, char **argv) {
                     close(sd3[j]);
                     sd3[j] = -1;
                     numObservers--;
-                    observerMap[findParticipantIndex(username, usedUsernames)] == -1;
+                    observerMap[findParticipantIndex(username, usedUsernames)] = -1;
                 }
                 printf("username: .%s.\n", username);
                 int affiliate = findParticipantIndex(username, usedUsernames);
@@ -476,9 +494,11 @@ int main(int argc, char **argv) {
                     // Check for valid active participant
                     if (observerMap[findParticipantIndex(username, usedUsernames)] == -1) {
                       send(sd3[j], &y, 1, 0);
+                      activeO[j] = 1;
+
                       char *newObserver = "A new observer has joined.";
                       broadcastToObservers(newObserver, sd3);
-                      observerMap[findParticipantIndex(username, usedUsernames)] == j;
+                      observerMap[findParticipantIndex(username, usedUsernames)] = j;
                     }
                     else {
                       send(sd3[j], &t, 1, 0);
@@ -497,7 +517,7 @@ int main(int argc, char **argv) {
 
             // Participant
             if (FD_ISSET(sd2[j], &readfds)) {
-                if (active[j] == 0) {//inactive
+                if (activeP[j] == 0) {//inactive
                     printf("top of inactive\n");
                     int validName;
                     //fullRead(sd2, &nameLen, sizeof(nameLen));
@@ -514,7 +534,7 @@ int main(int argc, char **argv) {
                         // Valid name
                         send(sd2[j], &y, sizeof(y), 0);
                         printf("sent y\n");
-                        active[j]=1;
+                        activeP[j]=1;
                     } else if(validName == 0) {
                         send(sd2[j], &invalid, sizeof(invalid), 0);
                         printf("sent i\n");
@@ -528,19 +548,7 @@ int main(int argc, char **argv) {
                         }
                     }
                     //end validate loop
-                    if (clock_gettime(CLOCK_REALTIME, &endP[j]) == -1) {
-                        perror("clock gettime");
-                        exit(EXIT_FAILURE);
-                    }
-                    timeDiff = (endP[j].tv_sec - startP[j].tv_sec) + (endP[j].tv_nsec - startP[j].tv_nsec) / 1E9;
-                    printf("Received %s in %.2lf\n", username, timeDiff);
-                    if(timeDiff > 10) {
-                        printf("Client took too long, closing connection sd[%d]. \n", j);
-                        close(sd2[j]);
-                        sd2[j]=-1;
-                        strncpy(usedUsernames[j], "", 1);
-                        numParticipants--;
-                    }
+
                     listUsernames(usedUsernames);
                 }
                 else {//active
@@ -581,7 +589,45 @@ int main(int argc, char **argv) {
                       broadcastToObservers(message, sd3);
                     }
                 }
+            }//end new participant message
+
+            //timeout participants
+            //printf("sctive[0] == %d, sd2[0] == %d\n", active[0], sd2[0]);
+            if(activeP[j] == 0 && sd2[j] != -1) {
+              //printf("sd2[%d] inactive part\n", j);
+              if (clock_gettime(CLOCK_REALTIME, &endP[j]) == -1) {
+                  perror("clock gettime");
+                  exit(EXIT_FAILURE);
+              }
+              timeDiff = (endP[j].tv_sec - startP[j].tv_sec) + (endP[j].tv_nsec - startP[j].tv_nsec) / 1E9;
+              printf("sd2[%d] username timeout= %.2lf\n", j, timeDiff);
+              if(timeDiff > 10) {
+                  printf("Client took too long, closing connection sd2[%d]. \n", j);
+                  close(sd2[j]);
+                  sd2[j]=-1;
+                  strncpy(usedUsernames[j], "", 1);
+                  numParticipants--;
+              }
             }
+            //timeout observers
+            if(activeO[j] == 0 && sd3[j] != -1) {
+              //printf("sd3[%d] inactive obs\n", j);
+              if (clock_gettime(CLOCK_REALTIME, &endO[j]) == -1) {
+                  perror("clock gettime");
+                  exit(EXIT_FAILURE);
+              }
+              timeDiff = (endO[j].tv_sec - startO[j].tv_sec) + (endO[j].tv_nsec - startO[j].tv_nsec) / 1E9;
+              printf("sd3[%d] timeout= %.2lf\n", j, timeDiff);
+              if(timeDiff > 10) {
+                  printf("Client took too long, closing connection sd3[%d]. \n", j);
+                  close(sd3[j]);
+                  sd3[j]=-1;
+                  strncpy(usedUsernames[j], "", 1);
+                  numObservers--;
+                  observerMap[findParticipantOfObserver(j,observerMap)] = -1;
+              }
+            }
+
         }
     }
     printf("Closing connection\n");
