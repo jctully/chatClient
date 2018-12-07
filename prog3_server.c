@@ -61,7 +61,12 @@ int fullRead(int sd, char* message, int bytes) {
     printf("recv msg .%s.\n", message);
 
     //printf("message: \"%s\"\n", message);
-    message[messageLen-1] = '\0';
+    if (message[messageLen-1]=='\n') {
+      message[messageLen-1] = '\0';
+    }
+    else {
+      message[messageLen] = '\0';
+    }
     return 0;
 
 }
@@ -213,6 +218,18 @@ void publicMessage(char *message, char *username) {
   strncpy(temp, publicMessage, 14);
   strncpy(&temp[14], message, 986);
   strncpy(message, temp, 1000);
+}
+
+void broadcastToObservers(char *message, int sd[]) {
+  uint16_t messageLen = strlen(message);
+  //send to observers
+  for (int i=0; i<255; i++) {
+    if (sd[i] != -1) {
+      printf("sending to observer @ sd[%d]\n", i);
+      send(sd[i], &messageLen, sizeof(messageLen), 0);
+      send(sd[i], message, messageLen, 0);
+    }
+  }
 }
 
 void leaveMessage(char *buf, char *username) {
@@ -435,13 +452,7 @@ int main(int argc, char **argv) {
                     send(sd3[j], &y, 1, 0);
 
                     char *newObserver = "A new observer has joined.";
-                    uint16_t msgLen = strlen(newObserver);
-                    for(int j = 0; j < 255; j++) {
-                        if(sd3[j] != -1) {
-                            send(sd3[j], &msgLen, sizeof(msgLen), 0);
-                            send(sd3[j], newObserver, msgLen, 0);
-                        }
-                    }
+                    broadcastToObservers(newObserver, sd3);
 
                     // Recv all messages send to/from sd2[affiliate]
 
@@ -522,11 +533,8 @@ int main(int argc, char **argv) {
 
                         leaveMessage(buf, usedUsernames[j]);
                         strncpy(usedUsernames[j], "", 1);
-                        //messageLen = strlen(buf);
+                        broadcastToObservers(buf, sd3);
 
-                        //send to observers
-                          //send(sd, &messageLen, sizeof(messageLen), 0);
-                          //send(sd, buf, messageLen, 0);
 
 
                     }
@@ -543,12 +551,7 @@ int main(int argc, char **argv) {
                     else {//public message
                       publicMessage(message, usedUsernames[j]);
                       printf("publicMessage output: \"%s\"\n", message);
-                      //messageLen = strlen(message);
-                      //send to observers
-                        //send(sd, &messageLen, sizeof(messageLen), 0);
-                        //send(sd, message, messageLen, 0);
-
-
+                      broadcastToObservers(message, sd3);
                     }
                 }
             }

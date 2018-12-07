@@ -51,7 +51,12 @@ int fullRead(int sd, char* message) {
     }
 
     //printf("message: \"%s\"\n", message);
-    message[messageLen-1] = '\0';
+    if (message[messageLen-1]=='\n') {
+      message[messageLen-1] = '\0';
+    }
+    else {
+      message[messageLen] = '\0';
+    }
     return 0;
 }
 
