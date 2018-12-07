@@ -66,7 +66,7 @@ int main( int argc, char **argv) {
   int port; /* protocol port number */
   char *host; /* pointer to host name */
   char buf[1000]; /* buffer for data from the server */
-  uint16_t nameLen;
+  uint8_t nameLen;
   uint16_t messageLen;
   char message[255];
   char letter;

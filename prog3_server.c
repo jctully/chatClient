@@ -37,14 +37,15 @@ int numObservers = 0;
 *------------------------------------------------------------------------
 */
 
-int fullRead(int sd, char* message) {
+int fullRead(int sd, char* message, int bytes) {
     int rv;
     uint16_t messageLen = 0;
 
-    if ((rv = recv(sd, &messageLen, sizeof(messageLen), 0)) <0) {
+    if ((rv = recv(sd, &messageLen, bytes, 0)) <0) {
       perror("recv");
       exit(EXIT_FAILURE);
     }
+    printf("msg len: %d\n", messageLen);
     if (messageLen == 0) {
         return -2;
     }
@@ -376,6 +377,12 @@ int main(int argc, char **argv) {
           send(sd3[o], &y, 1, 0);
           printf("Observer sd[%d] added\n", o);
 
+          // Start timer
+          if (clock_gettime(CLOCK_REALTIME, &startO[o]) == -1)
+          {
+              perror("clock gettime");
+              exit(EXIT_FAILURE);
+          }
 
         }
 
@@ -418,7 +425,7 @@ int main(int argc, char **argv) {
         for (int j = 0; j<255; j++) {
             //Observer
             if(FD_ISSET(sd3[j], &readfds)) {
-                fullRead(sd3[j], username);
+                rv = fullRead(sd3[j], username, 1);
 
                 printf("username: .%s.\n", username);
                 int affiliate = findParticipantIndex(username, usedUsernames, numParticipants);
@@ -453,7 +460,7 @@ int main(int argc, char **argv) {
                     printf("top of inactive\n");
                     int validName;
                     //fullRead(sd2, &nameLen, sizeof(nameLen));
-                    fullRead(sd2[j], username);
+                    fullRead(sd2[j], username, 1);
                     printf("name = .%s.\n", username);
 
                     // Validate username
@@ -497,9 +504,9 @@ int main(int argc, char **argv) {
                 }
                 else {//active
                     printf("sd2[%d] set\n", j);
-                    rv = fullRead(sd2[j], message);
+                    rv = fullRead(sd2[j], message, 2);
                     if (rv == -1) {
-                        printf("Message too long, closing connection sd[%d]\n", j);
+                        printf("Message too long, closing connection sd2[%d]\n", j);
                         close(sd2[j]);
                         sd2[j] = -1;
                         strncpy(usedUsernames[j], "", 1);
@@ -508,7 +515,7 @@ int main(int argc, char **argv) {
                     }
                     //printf("terminated message: .%s.\n", message);
                     if (strcmp("quit", message) == 0 || rv==-2) {
-                        printf("Quit received, closing connection sd[%d]\n", j);
+                        printf("Quit received, closing connection sd2[%d]\n", j);
                         close(sd2[j]);
                         sd2[j] = -1;
                         numParticipants--;

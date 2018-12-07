@@ -149,6 +149,7 @@ int main( int argc, char **argv) {
       //nameLen = htons(nameLen);
       send(sd, &nameLen, sizeof(nameLen), 0);
       send(sd, buf, nameLen, 0);
+      printf(".%s. len %d\n", buf, nameLen);
 
       recv(sd, &letter, sizeof(letter), 0);
       //printf("Read letter: %c\n", letter);
