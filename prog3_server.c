@@ -268,6 +268,16 @@ void setupSocket(int *sd, int port, struct sockaddr_in *sad) {
     }
 }
 
+int findParticipantIndex(char *username, char usedUsernames[255][11], int numParticipants) {
+    for(int i = 0; i < numParticipants; i++) {
+        printf("cmp %s and %s\n", username, usedUsernames[i]);
+        if(strcmp(username, usedUsernames[i]) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 int main(int argc, char **argv) {
     struct sockaddr_in sad_p, sad_o; /* structure to hold server's address */
     struct sockaddr_in cad; /* structure to hold client's address */
@@ -338,7 +348,7 @@ int main(int argc, char **argv) {
         }
         //printf("after select\n");
 
-        // Accept client connections
+        // Accept observer connections
         if (FD_ISSET(sd_o, &readfds)) {
           printf("running accept observer\n");
           if ((sd3[o] = accept(sd_o, (struct sockaddr *)&cad, &alen)) < 0) {
@@ -356,7 +366,21 @@ int main(int argc, char **argv) {
           // Check for valid active participant
           send(sd3[o], &y, 1, 0);
           printf("Observer sd[%d] added\n", o);
+
+          fullRead(sd3[o], username);
+          printf("username: .%s.\n", username);
+          int affiliate = findParticipantIndex(username, usedUsernames, numParticipants);
+          if(affiliate > -1) {
+              printf("Participant found!\n");
+
+              // Recv all messages send to/from sd2[affiliate]
+
+          } else {
+              printf("Participant not found!\n");
+          }
         }
+
+        // Accept participant connections
         if (FD_ISSET(sd_p, &readfds)) {
             printf("running accept participant\n");
             if ((sd2[i] = accept(sd_p, (struct sockaddr *)&cad, &alen)) < 0) {
@@ -438,6 +462,12 @@ int main(int argc, char **argv) {
         // active participant messages
         //printf("Waiting to recv\n");
         for (int j = 0; j<255; j++) {
+            //Observer
+            if(FD_ISSET(sd3[j], &readfds)) {
+
+            }
+
+            // Participant
             if (FD_ISSET(sd2[j], &readfds)) {
                 printf("sd2[%d] set\n", j);
                 rv = fullRead(sd2[j], message);
