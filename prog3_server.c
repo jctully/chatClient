@@ -163,28 +163,38 @@ int resetFDSet(fd_set *readfds, int sd[255], int sd2[255], int sdPart, int sdObs
     return ++maxsd;
 }
 
-/* int sendPrivate(char *message, char *sender, char usedUsernames[255][11]) {
+char* getPrivateUsername(char* message) {
+  char username[11], *realUser;
+  const char delim = ' ';
+
+  strncpy(username, strtok(message, &delim), 11);
+  realUser = &username[1];
+  return realUser;
+}
+
+ int sendPrivate(char *message, char *sender, char usedUsernames[255][11], int sd[], int observerMap[]) {
     printf("sending private\n");
-    char *username, *token;
+    char username[11], *realUser, *token;
     char temp[1000];
     char privateMessage[14] = "-           : ";
     const char delim = ' ';
     const char delim2 = '\0';
     int rv;
+    uint16_t messageLen;
 
-    strncpy(sender, strtok(message, &delim), 11);
-    ++username;
-    //printf("user = .%s.\n", username);
+    realUser = getPrivateUsername(message);
+    //printf("user = .%s.\n", realUser);
 
     //search for username, validate
-    rv = checkUsername(usedUsernames, username);
+    rv = checkUsername(usedUsernames, realUser);
     if (rv >= 0) {
-      printf("Could not find user .%s.\n", username);
+      printf("Could not find user .%s.\n", realUser);
       return -1;
     }
 
     token = strtok(NULL, &delim2);
     strncpy(message, token, strlen(token));
+    message[strlen(token)]='\0';
 
     //prepend
     int j=strlen(sender)-1;
@@ -199,10 +209,17 @@ int resetFDSet(fd_set *readfds, int sd[255], int sd2[255], int sdPart, int sdObs
     strncpy(message, temp, 1000);
     printf("message = .%s.\n", message);
 
+    int i = observerMap[findParticipantIndex(realUser, usedUsernames)];
+
+    messageLen = strlen(message);
+    //send to observers
+    send(sd[i], &messageLen, sizeof(messageLen), 0);
+    send(sd[i], message, messageLen, 0);
+
     return 1;
 
 
-} */
+}
 
 void publicMessage(char *message, char *username) {
   char temp[1000];
@@ -293,9 +310,9 @@ void setupSocket(int *sd, int port, struct sockaddr_in *sad) {
     }
 }
 
-int findParticipantIndex(char *username, char usedUsernames[255][11], int numParticipants) {
-    for(int i = 0; i < numParticipants; i++) {
-        printf("cmp %s and %s\n", username, usedUsernames[i]);
+int findParticipantIndex(char *username, char usedUsernames[255][11]) {
+    for(int i = 0; i < 255; i++) {
+        //printf("cmp %s and %s\n", username, usedUsernames[i]);
         if(strcmp(username, usedUsernames[i]) == 0) {
             return i;
         }
@@ -318,13 +335,15 @@ int main(int argc, char **argv) {
     struct timespec startP[255], endP[255], startO[255], endO[255];
     double timeDiff = 0;
     char usedUsernames[255][11];
-    //uint16_t messageLen;
     int rv, sock;
     int active[255];
+    uint16_t messageLen;
+    int observerMap[255] = { -1 };
 
     for (int i=0; i<255; i++) {
         sd2[i] = -1;
         sd3[i] = -1;
+        observerMap[i] = -1;
     }
 
     fd_set readfds;
@@ -443,16 +462,27 @@ int main(int argc, char **argv) {
             //Observer
             if(FD_ISSET(sd3[j], &readfds)) {
                 rv = fullRead(sd3[j], username, 1);
-
+                if (rv==-2) {
+                    printf("Quit received, closing connection sd2[%d]\n", j);
+                    close(sd3[j]);
+                    sd3[j] = -1;
+                    numObservers--;
+                    observerMap[findParticipantIndex(username, usedUsernames)] == -1;
+                }
                 printf("username: .%s.\n", username);
-                int affiliate = findParticipantIndex(username, usedUsernames, numParticipants);
+                int affiliate = findParticipantIndex(username, usedUsernames);
                 if(affiliate > -1) {
                     printf("Participant found!\n");
                     // Check for valid active participant
-                    send(sd3[j], &y, 1, 0);
-
-                    char *newObserver = "A new observer has joined.";
-                    broadcastToObservers(newObserver, sd3);
+                    if (observerMap[findParticipantIndex(username, usedUsernames)] == -1) {
+                      send(sd3[j], &y, 1, 0);
+                      char *newObserver = "A new observer has joined.";
+                      broadcastToObservers(newObserver, sd3);
+                      observerMap[findParticipantIndex(username, usedUsernames)] == j;
+                    }
+                    else {
+                      send(sd3[j], &t, 1, 0);
+                    }
 
                     // Recv all messages send to/from sd2[affiliate]
 
@@ -539,12 +569,9 @@ int main(int argc, char **argv) {
 
                     }
                     else if (message[0] == '@') {//private message
-                        //rv = sendPrivate(message, usedUsernames[j], usedUsernames);
-                        if (rv==1) {
-                          //messageLen = strlen(message);
-                          //send to observers
-                            //send(sd, &messageLen, sizeof(messageLen), 0);
-                            //send(sd, message, messageLen, 0);
+                        rv = sendPrivate(message, usedUsernames[j], usedUsernames, sd3, observerMap);
+                        if (rv==1) {//sent
+                          printf("pm sent\n");
                         }
 
                     }
