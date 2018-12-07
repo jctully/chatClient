@@ -129,7 +129,7 @@ int addUsername (char usedNames[255][11], char *username, int i) {
 
 }
 
-int resetFDSet(fd_set *readfds, int sd[255], int sdPart, int sdObs) {
+int resetFDSet(fd_set *readfds, int sd[255], int sd2[255], int sdPart, int sdObs) {
     //printf("inside reset fds function\n");
     FD_ZERO(readfds);
     FD_SET(sdPart, readfds);
@@ -144,6 +144,13 @@ int resetFDSet(fd_set *readfds, int sd[255], int sdPart, int sdObs) {
             FD_SET(sd[i], readfds);
             if (sd[i] > maxsd) {
                 maxsd = sd[i];
+            }
+        }
+        if (sd2[i] != -1) {
+            printf("observer sd %d in use\n", i);
+            FD_SET(sd2[i], readfds);
+            if (sd2[i] > maxsd) {
+                maxsd = sd2[i];
             }
         }
     }
@@ -286,14 +293,16 @@ int main(int argc, char **argv) {
     socklen_t alen; /* length of address */
     char buf[1000]; /* buffer for string the server sends */
     char n = 'N', y = 'Y', t='T', invalid = 'I';
+    struct timeval tv;
 
     char username[11];
     char message[MAX_LENGTH];
-    struct timespec start, end;
+    struct timespec startP[255], endP[255], startO[255], endO[255];
     double timeDiff = 0;
     char usedUsernames[255][11];
     //uint16_t messageLen;
     int rv, sock;
+    int active[255];
 
     for (int i=0; i<255; i++) {
         sd2[i] = -1;
@@ -339,9 +348,10 @@ int main(int argc, char **argv) {
         printf("next open o ind = %d\n", o);
 
         alen = sizeof(cad);
-        sock = resetFDSet(&readfds, sd2, sd_p, sd_o);
+        sock = resetFDSet(&readfds, sd2, sd3, sd_p, sd_o);
         //printf("sock = %d\n", sock);
-        rv = select(sock, &readfds, NULL, NULL, NULL);
+        tv.tv_sec = 1;
+        rv = select(sock, &readfds, NULL, NULL, &tv);
         if (rv == -1) {
             perror("select"); // error occurred in select()
             exit(EXIT_FAILURE);
@@ -363,21 +373,10 @@ int main(int argc, char **argv) {
               continue;
           }
           numObservers++;
-          // Check for valid active participant
           send(sd3[o], &y, 1, 0);
           printf("Observer sd[%d] added\n", o);
 
-          fullRead(sd3[o], username);
-          printf("username: .%s.\n", username);
-          int affiliate = findParticipantIndex(username, usedUsernames, numParticipants);
-          if(affiliate > -1) {
-              printf("Participant found!\n");
 
-              // Recv all messages send to/from sd2[affiliate]
-
-          } else {
-              printf("Participant not found!\n");
-          }
         }
 
         // Accept participant connections
@@ -401,58 +400,13 @@ int main(int argc, char **argv) {
             send(sd2[i], &y, 1, 0);
 
             // Start timer
-            if (clock_gettime(CLOCK_REALTIME, &start) == -1)
+            if (clock_gettime(CLOCK_REALTIME, &startP[i]) == -1)
             {
                 perror("clock gettime");
                 exit(EXIT_FAILURE);
-
             }
-            int validName = 0;
-            while (validName < 1) {
-                //fullRead(sd2, &nameLen, sizeof(nameLen));
-                fullRead(sd2[i], username);
-                printf("name = .%s.\n", username);
 
-                // Validate username
-                validName = checkUsername(usedUsernames, username);
-                if (validName == 1) {
-                  addUsername(usedUsernames, username, i);
-                }
-
-                if(validName == 1) {
-                    // Valid name
-                    send(sd2[i], &y, sizeof(y), 0);
-                    printf("sent y\n");
-                } else if(validName == 0) {
-                    send(sd2[i], &invalid, sizeof(invalid), 0);
-                    printf("sent i\n");
-                } else if(validName == -1) {
-                    printf("sent t\n");
-                    send(sd2[i], &t, sizeof(t), 0);
-                    // reset clock
-                    if (clock_gettime(CLOCK_REALTIME, &start) == -1) {
-                        perror("clock gettime");
-                        exit(EXIT_FAILURE);
-                    }
-                }
-            } //end validate loop
-            if (clock_gettime(CLOCK_REALTIME, &end) == -1) {
-                perror("clock gettime");
-                exit(EXIT_FAILURE);
-            }
-            timeDiff = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1E9;
-            printf("Received %s in %.2lf\n", username, timeDiff);
-            if(timeDiff > 10) {
-                printf("Client took too long, closing connection.\n");
-                close(sd2[i]);
-                sd2[i]=-1;
-                strncpy(usedUsernames[i], "", 1);
-                numParticipants--;
-                continue;
-            }
-            listUsernames(usedUsernames);
-
-        } //end if new client
+        } //end if new participant
 
         for (int k=0; k<255; k++) {
           if (sd2[k]!=-1) {
@@ -464,57 +418,131 @@ int main(int argc, char **argv) {
         for (int j = 0; j<255; j++) {
             //Observer
             if(FD_ISSET(sd3[j], &readfds)) {
+                fullRead(sd3[j], username);
 
+                printf("username: .%s.\n", username);
+                int affiliate = findParticipantIndex(username, usedUsernames, numParticipants);
+                if(affiliate > -1) {
+                    printf("Participant found!\n");
+                    // Check for valid active participant
+                    send(sd3[j], &y, 1, 0);
+
+                    char *newObserver = "A new observer has joined.";
+                    uint16_t msgLen = strlen(newObserver);
+                    for(int j = 0; j < 255; j++) {
+                        if(sd3[j] != -1) {
+                            send(sd3[j], &msgLen, sizeof(msgLen), 0);
+                            send(sd3[j], newObserver, msgLen, 0);
+                        }
+                    }
+
+                    // Recv all messages send to/from sd2[affiliate]
+
+                } else {
+                    printf("Participant not found!\n");
+                    send(sd3[j], &n, 1, 0);
+                    close(sd3[j]);
+                    sd3[j] = -1;
+                    numObservers--;
+                }
             }
 
             // Participant
             if (FD_ISSET(sd2[j], &readfds)) {
-                printf("sd2[%d] set\n", j);
-                rv = fullRead(sd2[j], message);
-                if (rv == -1) {
-                    printf("Message too long, closing connection sd[%d]\n", j);
-                    close(sd2[j]);
-                    sd2[j] = -1;
-                    strncpy(usedUsernames[j], "", 1);
-                    numParticipants--;
-                    break;
+                if (active[j] == 0) {//inactive
+                    printf("top of inactive\n");
+                    int validName;
+                    //fullRead(sd2, &nameLen, sizeof(nameLen));
+                    fullRead(sd2[j], username);
+                    printf("name = .%s.\n", username);
+
+                    // Validate username
+                    validName = checkUsername(usedUsernames, username);
+                    if (validName == 1) {
+                      addUsername(usedUsernames, username, j);
+                    }
+
+                    if(validName == 1) {
+                        // Valid name
+                        send(sd2[j], &y, sizeof(y), 0);
+                        printf("sent y\n");
+                        active[j]=1;
+                    } else if(validName == 0) {
+                        send(sd2[j], &invalid, sizeof(invalid), 0);
+                        printf("sent i\n");
+                    } else if(validName == -1) {
+                        printf("sent t\n");
+                        send(sd2[j], &t, sizeof(t), 0);
+                        // reset clock
+                        if (clock_gettime(CLOCK_REALTIME, &startP[j]) == -1) {
+                            perror("clock gettime");
+                            exit(EXIT_FAILURE);
+                        }
+                    }
+                    //end validate loop
+                    if (clock_gettime(CLOCK_REALTIME, &endP[j]) == -1) {
+                        perror("clock gettime");
+                        exit(EXIT_FAILURE);
+                    }
+                    timeDiff = (endP[j].tv_sec - startP[j].tv_sec) + (endP[j].tv_nsec - startP[j].tv_nsec) / 1E9;
+                    printf("Received %s in %.2lf\n", username, timeDiff);
+                    if(timeDiff > 10) {
+                        printf("Client took too long, closing connection sd[%d]. \n", j);
+                        close(sd2[j]);
+                        sd2[j]=-1;
+                        strncpy(usedUsernames[j], "", 1);
+                        numParticipants--;
+                    }
+                    listUsernames(usedUsernames);
                 }
-                //printf("terminated message: .%s.\n", message);
-                if (strcmp("quit", message) == 0 || rv==-2) {
-                    printf("Quit received, closing connection sd[%d]\n", j);
-                    close(sd2[j]);
-                    sd2[j] = -1;
-                    numParticipants--;
+                else {//active
+                    printf("sd2[%d] set\n", j);
+                    rv = fullRead(sd2[j], message);
+                    if (rv == -1) {
+                        printf("Message too long, closing connection sd[%d]\n", j);
+                        close(sd2[j]);
+                        sd2[j] = -1;
+                        strncpy(usedUsernames[j], "", 1);
+                        numParticipants--;
+                        break;
+                    }
+                    //printf("terminated message: .%s.\n", message);
+                    if (strcmp("quit", message) == 0 || rv==-2) {
+                        printf("Quit received, closing connection sd[%d]\n", j);
+                        close(sd2[j]);
+                        sd2[j] = -1;
+                        numParticipants--;
 
-                    leaveMessage(buf, usedUsernames[j]);
-                    strncpy(usedUsernames[j], "", 1);
-                    //messageLen = strlen(buf);
+                        leaveMessage(buf, usedUsernames[j]);
+                        strncpy(usedUsernames[j], "", 1);
+                        //messageLen = strlen(buf);
 
-                    //send to observers
-                      //send(sd, &messageLen, sizeof(messageLen), 0);
-                      //send(sd, buf, messageLen, 0);
+                        //send to observers
+                          //send(sd, &messageLen, sizeof(messageLen), 0);
+                          //send(sd, buf, messageLen, 0);
 
 
-                }
-                else if (message[0] == '@') {//private message
-                    //rv = sendPrivate(message, usedUsernames[j], usedUsernames);
-                    if (rv==1) {
+                    }
+                    else if (message[0] == '@') {//private message
+                        //rv = sendPrivate(message, usedUsernames[j], usedUsernames);
+                        if (rv==1) {
+                          //messageLen = strlen(message);
+                          //send to observers
+                            //send(sd, &messageLen, sizeof(messageLen), 0);
+                            //send(sd, message, messageLen, 0);
+                        }
+
+                    }
+                    else {//public message
+                      publicMessage(message, usedUsernames[j]);
+                      printf("publicMessage output: \"%s\"\n", message);
                       //messageLen = strlen(message);
                       //send to observers
                         //send(sd, &messageLen, sizeof(messageLen), 0);
                         //send(sd, message, messageLen, 0);
+
+
                     }
-
-                }
-                else {//public message
-                  publicMessage(message, usedUsernames[j]);
-                  printf("publicMessage output: \"%s\"\n", message);
-                  //messageLen = strlen(message);
-                  //send to observers
-                    //send(sd, &messageLen, sizeof(messageLen), 0);
-                    //send(sd, message, messageLen, 0);
-
-
                 }
             }
         }

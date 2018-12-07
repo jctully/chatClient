@@ -29,22 +29,30 @@
 *------------------------------------------------------------------------
 */
 
-void fullRead(int sd, char* buffer, int length) {
-  int m;
-  int n =  recv(sd, buffer, length, 0);
-  if (n<0) {
-    perror("recv");
-    exit(EXIT_FAILURE);
-  }
-  while (n < length) {
-    m =  recv(sd, buffer, length - n, 0);
-    if (m<0) {
+int fullRead(int sd, char* message) {
+    int rv;
+    uint16_t messageLen = 0;
+
+    if ((rv = recv(sd, &messageLen, sizeof(messageLen), 0)) <0) {
       perror("recv");
       exit(EXIT_FAILURE);
     }
-    n += m;
-  }
-  buffer[length] = '\0';
+    if (messageLen == 0) {
+        return -2;
+    }
+    if (messageLen > MAX_LENGTH) {
+        return -1;
+    }
+    //printf("converetd len %d\n", messageLen);
+
+    if ((rv = recv(sd, message, messageLen, 0)) <0) {
+      perror("recv");
+      exit(EXIT_FAILURE);
+    }
+
+    //printf("message: \"%s\"\n", message);
+    message[messageLen-1] = '\0';
+    return 0;
 }
 
 //0 if non-whitespace characters present, else 1
@@ -66,11 +74,11 @@ int main( int argc, char **argv) {
   int port; /* protocol port number */
   char *host; /* pointer to host name */
   char buf[1000]; /* buffer for data from the server */
-  uint16_t nameLen;
-  uint16_t messageLen;
-  char message[255];
+  uint8_t nameLen;
+  //uint16_t messageLen;
+  //char message[255];
   char letter;
-  int rv;
+  //int rv;
   int activeState;
 
   fd_set readfds;
@@ -145,6 +153,7 @@ int main( int argc, char **argv) {
       recv(sd, &letter, sizeof(letter), 0);
       //printf("Read letter: %c\n", letter);
       if(letter == 'Y') {
+        printf("Affiliate found.\n");
         activeState = 1;
       }
       else if (letter == 'T') {
@@ -156,26 +165,8 @@ int main( int argc, char **argv) {
     }//end inac state
 
     while(1) {//message loop
-      printf("Enter message: ");
-      fgets(message, 255, stdin);
-      messageLen = strlen(message);
-      //validate
-      rv = whitespace(message);
-      if (rv==1) {
-        printf("Message can't be all whitespace.\n");
-        continue;
-      }
-      send(sd, &messageLen, sizeof(messageLen), 0);
-      send(sd, message, messageLen, 0);
-      //printf("message sent: \"%s\"\n", message);
-      if (strlen(message) > MAX_LENGTH) {
-        printf("Message too long. ");
-        break;
-      }
-      if (strcmp("quit\n", message) == 0) {
-        printf("Quit received. ");
-        break;
-      }
+      fullRead(sd, buf);
+      printf("%s\n", buf);
     } //end message loop
 
   } else if (letter=='N') {
