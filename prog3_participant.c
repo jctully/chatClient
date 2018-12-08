@@ -87,9 +87,9 @@ int main( int argc, char **argv) {
   }
 
   port = atoi(argv[2]); /* convert to binary */
-  if (port > 0) /* test for legal value */
-  sad.sin_port = htons((u_short)port);
-  else {
+  if (port > 0) { /* test for legal value */
+    sad.sin_port = htons((u_short)port);
+  } else {
     fprintf(stderr,"Error: bad port number %s\n",argv[2]);
     exit(EXIT_FAILURE);
   }
@@ -128,8 +128,10 @@ int main( int argc, char **argv) {
   }
 
   // Check if theres room for another connection
-  printf("waiting for server response\n");
-  recv(sd, &letter, 1, 0);
+  if(recv(sd, &letter, 1, 0) < 0) {
+      close(sd);
+      exit(EXIT_FAILURE);
+  }
   if (letter == 'Y') {
     activeState = 0;
     //prompt input
