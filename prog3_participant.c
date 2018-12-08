@@ -130,19 +130,19 @@ int main( int argc, char **argv) {
 
   // Check if theres room for another connection
   if(recv(sd, &letter, 1, 0) < 0) {
-      close(sd);
-      exit(EXIT_FAILURE);
+    close(sd);
+    exit(EXIT_FAILURE);
   }
   //printf("waiting for server response\n");
   if (letter == 'Y') {
     activeState = 0;
     //prompt input
 
-          struct timeval tv;
-          fd_set fds;
-          tv.tv_sec = 10;
-          FD_ZERO(&fds);
-          FD_SET(0, &fds); //STDIN_FILENO is 0
+    struct timeval tv;
+    fd_set fds;
+    tv.tv_sec = 10;
+    FD_ZERO(&fds);
+    FD_SET(0, &fds); //STDIN_FILENO is 0
     while (activeState==0) {
       printf("Enter a username\n");
 

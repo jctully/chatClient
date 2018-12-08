@@ -31,34 +31,34 @@
 */
 
 int fullRead(int sd, char* message) {
-    int rv;
-    uint16_t messageLen = 0;
+  int rv;
+  uint16_t messageLen = 0;
 
-    if ((rv = recv(sd, &messageLen, sizeof(messageLen), 0)) <0) {
-      perror("recv");
-      exit(EXIT_FAILURE);
-    }
-    if (messageLen == 0) {
-        return -2;
-    }
-    if (messageLen > MAX_LENGTH) {
-        return -1;
-    }
-    //printf("converetd len %d\n", messageLen);
+  if ((rv = recv(sd, &messageLen, sizeof(messageLen), 0)) <0) {
+    perror("recv");
+    exit(EXIT_FAILURE);
+  }
+  if (messageLen == 0) {
+    return -2;
+  }
+  if (messageLen > MAX_LENGTH) {
+    return -1;
+  }
+  //printf("converetd len %d\n", messageLen);
 
-    if ((rv = recv(sd, message, messageLen, 0)) <0) {
-      perror("recv");
-      exit(EXIT_FAILURE);
-    }
+  if ((rv = recv(sd, message, messageLen, 0)) <0) {
+    perror("recv");
+    exit(EXIT_FAILURE);
+  }
 
-    //printf("message: \"%s\"\n", message);
-    if (message[messageLen-1]=='\n') {
-      message[messageLen-1] = '\0';
-    }
-    else {
-      message[messageLen] = '\0';
-    }
-    return 0;
+  //printf("message: \"%s\"\n", message);
+  if (message[messageLen-1]=='\n') {
+    message[messageLen-1] = '\0';
+  }
+  else {
+    message[messageLen] = '\0';
+  }
+  return 0;
 }
 
 //0 if non-whitespace characters present, else 1
@@ -162,9 +162,13 @@ int main( int argc, char **argv) {
       send(sd, &nameLen, sizeof(nameLen), 0);
       send(sd, buf, nameLen, 0);
       //printf(".%s. len %d\n", buf, nameLen);
+      select(sd+1, &fds, NULL, NULL, NULL);
 
-      recv(sd, &letter, sizeof(letter), 0);
-      //printf("Read letter: %c\n", letter);
+      if ((rv = recv(sd, &letter, sizeof(letter), 0)) <0) {
+        perror("recv");
+        exit(EXIT_FAILURE);
+      }
+      printf("Read letter: %c\n", letter);
       if(letter == 'Y') {
         printf("Affiliate found.\n");
         activeState = 1;
