@@ -179,8 +179,9 @@ int main( int argc, char **argv) {
     }//end inac state
 
     while(1) {//message loop
-      printf("Enter message: ");
+      printf("Enter your message\n");
       fgets(message, 255, stdin);
+
       messageLen = strlen(message);
       //validate
       rv = whitespace(message);
@@ -195,7 +196,7 @@ int main( int argc, char **argv) {
         printf("Message too long. ");
         break;
       }
-      if (strcmp("quit\n", message) == 0) {
+      if (strcmp("/quit\n", message) == 0) {
         printf("Quit received. ");
         break;
       }
