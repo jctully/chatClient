@@ -16,20 +16,8 @@
 #define MAX_LENGTH 1000
 
 
-
-/*------------------------------------------------------------------------
-* Program: demo_client
-*
-* Purpose: allocate a socket, connect to a server, and print all output
-*
-* Syntax: ./demo_client server_address server_port
-*
-* server_address - name of a computer on which server is executing
-* server_port    - protocol port number server is using
-*
-*------------------------------------------------------------------------
-*/
-
+/* Used to read first a message's length, then the message itself. returns 0
+if send successful, -1 if message too long, -2 if message blank. */
 int fullRead(int sd, char* message) {
   int rv;
   uint16_t messageLen = 0;
@@ -44,14 +32,12 @@ int fullRead(int sd, char* message) {
   if (messageLen > MAX_LENGTH) {
     return -1;
   }
-  //printf("converetd len %d\n", messageLen);
 
   if ((rv = recv(sd, message, messageLen, 0)) <0) {
     perror("recv");
     exit(EXIT_FAILURE);
   }
 
-  //printf("message: \"%s\"\n", message);
   if (message[messageLen-1]=='\n') {
     message[messageLen-1] = '\0';
   }
@@ -61,7 +47,7 @@ int fullRead(int sd, char* message) {
   return 0;
 }
 
-//0 if non-whitespace characters present, else 1
+//returns 0 if non-whitespace characters present in string, else 1
 int whitespace(const char *str) {
   while (*str != '\0') {
     if (!isspace((unsigned char)*str)) {
@@ -81,10 +67,7 @@ int main( int argc, char **argv) {
   char *host; /* pointer to host name */
   char buf[1000]; /* buffer for data from the server */
   uint8_t nameLen;
-  //uint16_t messageLen;
-  //char message[255];
   char letter;
-  //int rv;
   int activeState;
   int rv;
 
@@ -101,6 +84,7 @@ int main( int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
+  //setup port
   port = atoi(argv[2]); /* convert to binary */
   if (port > 0) { /* test for legal value */
     sad.sin_port = htons((u_short)port);
@@ -142,13 +126,11 @@ int main( int argc, char **argv) {
 
   fd_set fds;
   FD_ZERO(&fds);
-  FD_SET(0, &fds); //STDIN_FILENO is 0
+  FD_SET(0, &fds);
   FD_SET(sd, &fds);
 
-  // Check if theres room for another connection
-
+  // Check if theres room in server
   recv(sd, &letter, 1, 0);
-  //printf("received letter %c\n", letter);
   if (letter == 'Y') {
     activeState = 0;
     //prompt input
@@ -156,19 +138,15 @@ int main( int argc, char **argv) {
       printf("Enter your affiliate\n");
       fgets(buf, 255, stdin);
       printf("\n");
-      //validate name, timer
       nameLen = strlen(buf);
-      //nameLen = htons(nameLen);
       send(sd, &nameLen, sizeof(nameLen), 0);
       send(sd, buf, nameLen, 0);
-      //printf(".%s. len %d\n", buf, nameLen);
       select(sd+1, &fds, NULL, NULL, NULL);
 
       if ((rv = recv(sd, &letter, sizeof(letter), 0)) <0) {
         perror("recv");
         exit(EXIT_FAILURE);
       }
-      printf("Read letter: %c\n", letter);
       if(letter == 'Y') {
         printf("Affiliate found.\n");
         activeState = 1;
@@ -179,11 +157,13 @@ int main( int argc, char **argv) {
       else if (letter == 'I') {
         printf("Affiliate invalid.\n");
       }
-    }//end inac state
+    }
     while(1) {
+      //reset fdset
       FD_ZERO(&fds);
-      FD_SET(0, &fds); //STDIN_FILENO is 0
+      FD_SET(0, &fds);
       FD_SET(sd, &fds);
+
       select(sd+1, &fds, NULL, NULL, NULL);
       if (FD_ISSET(0,&fds)) {
         fgets(buf, 255, stdin);

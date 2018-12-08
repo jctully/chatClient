@@ -15,21 +15,8 @@
 
 #define MAX_LENGTH 1000
 
-
-
-/*------------------------------------------------------------------------
-* Program: demo_client
-*
-* Purpose: allocate a socket, connect to a server, and print all output
-*
-* Syntax: ./demo_client server_address server_port
-*
-* server_address - name of a computer on which server is executing
-* server_port    - protocol port number server is using
-*
-*------------------------------------------------------------------------
-*/
-
+/* Used to read first a message's length, then the message itself. returns 0
+if send successful, -1 if message too long, -2 if message blank. */
 void fullRead(int sd, char* buffer, int length) {
   int m;
   int n =  recv(sd, buffer, length, 0);
@@ -48,7 +35,7 @@ void fullRead(int sd, char* buffer, int length) {
   buffer[length] = '\0';
 }
 
-//0 if non-whitespace characters present, else 1
+//returns 0 if non-whitespace characters present in string, else 1
 int whitespace(const char *str) {
   while (*str != '\0') {
     if (!isspace((unsigned char)*str)) {
@@ -87,6 +74,7 @@ int main( int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
+  //setup port
   port = atoi(argv[2]); /* convert to binary */
   if (port > 0) { /* test for legal value */
     sad.sin_port = htons((u_short)port);
@@ -119,7 +107,6 @@ int main( int argc, char **argv) {
     exit(EXIT_FAILURE);
   }
 
-
   /* Connect the socket to the specified server.*/
   if (connect(sd, (struct sockaddr*) &sad, sizeof(sad)) < 0) {
     if (errno != EINPROGRESS) {
@@ -133,41 +120,30 @@ int main( int argc, char **argv) {
     close(sd);
     exit(EXIT_FAILURE);
   }
-  //printf("waiting for server response\n");
-  if (letter == 'Y') {
+  if (letter == 'Y') { //server not full
     activeState = 0;
-    //prompt input
-
     struct timeval tv;
     fd_set fds;
     tv.tv_sec = 10;
     FD_ZERO(&fds);
-    FD_SET(0, &fds); //STDIN_FILENO is 0
+    FD_SET(0, &fds);
     while (activeState==0) {
       printf("Enter a username\n");
-
       int ret = select(1, &fds, NULL, NULL, &tv);
       if(ret == 0) {
-
         printf("Closing connection\n");
         close(sd);
-
         exit(EXIT_SUCCESS);
       }
       else {
         fgets(buf, 255, stdin);
-
       }
-
-      printf("\n");
-      //validate name, timer
+      //send username
       nameLen = strlen(buf);
-      //nameLen = htons(nameLen);
       send(sd, &nameLen, sizeof(nameLen), 0);
       send(sd, buf, nameLen, 0);
 
       recv(sd, &letter, sizeof(letter), 0);
-      //printf("Read letter: %c\n", letter);
       if(letter == 'Y') {
         activeState = 1;
       }
@@ -177,14 +153,13 @@ int main( int argc, char **argv) {
       else if (letter == 'I') {
         printf("Username invalid.\n");
       }
-    }//end inac state
+    }
 
     while(1) {//message loop
       printf("Enter your message\n");
       fgets(message, 255, stdin);
 
       messageLen = strlen(message);
-      //validate
       rv = whitespace(message);
       if (rv==1) {
         printf("Message can't be all whitespace.\n");
@@ -192,7 +167,7 @@ int main( int argc, char **argv) {
       }
       send(sd, &messageLen, sizeof(messageLen), 0);
       send(sd, message, messageLen, 0);
-      //printf("message sent: \"%s\"\n", message);
+
       if (strlen(message) > MAX_LENGTH) {
         printf("Message too long. ");
         break;
@@ -201,7 +176,7 @@ int main( int argc, char **argv) {
         printf("Quit received. ");
         break;
       }
-    } //end message loop
+    }
 
   } else if (letter=='N') {
     printf("Server full. ");
