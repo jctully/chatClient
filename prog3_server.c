@@ -1,16 +1,16 @@
+#include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <ctype.h>
-#include <stdlib.h>
 #include <unistd.h>
 
 #include <netdb.h>
 #include <netinet/in.h>
-#include <sys/socket.h>
-#include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/select.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
 #define QLEN 6 /* size of request queue */
 #define MAX_LENGTH 1000 //max msg len
