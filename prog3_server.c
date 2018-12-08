@@ -146,14 +146,14 @@ int resetFDSet(fd_set *readfds, int sd[255], int sd2[255], int sdPart, int sdObs
     }
     for (int i=0; i<255; i++) {
         if (sd[i] != -1) {
-            printf("sd %d in use\n", i);
+            //printf("sd %d in use\n", i);
             FD_SET(sd[i], readfds);
             if (sd[i] > maxsd) {
                 maxsd = sd[i];
             }
         }
         if (sd2[i] != -1) {
-            printf("observer sd %d in use\n", i);
+            //printf("observer sd %d in use\n", i);
             FD_SET(sd2[i], readfds);
             if (sd2[i] > maxsd) {
                 maxsd = sd2[i];
@@ -163,19 +163,33 @@ int resetFDSet(fd_set *readfds, int sd[255], int sd2[255], int sdPart, int sdObs
     return ++maxsd;
 }
 
-char* getPrivateUsername(char* message) {
-  char username[11], *realUser;
+void getPrivateUsername(char* message, char *recipient) {
+  char *username;
   const char delim = ' ';
+  const char delim2 = '\0';
 
-  strncpy(username, strtok(message, &delim), 11);
-  realUser = &username[1];
-  return realUser;
+  printf("top message = .%s.\n", message);
+
+  username = strtok(message, &delim);
+  message = strtok(NULL, &delim2);
+
+  printf("user = .%s. message = .%s.\n", username, message);
+
+  for (int i=0; i<strlen(username)-1; i++) {
+
+      recipient[i] = username[i+1];
+
+  }
+  printf("bot message = .%s.\n", message);
+
 }
 
-int findParticipantIndex(char *username, char usedUsernames[255][11]) {
+int findParticipantIndex(char username[11], char usedUsernames[255][11]) {
     for(int i = 0; i < 255; i++) {
         //printf("cmp %s and %s\n", username, usedUsernames[i]);
+        //printf("comparing .%s. to .%s.\n", username, usedUsernames[i]);
         if(strcmp(username, usedUsernames[i]) == 0) {
+          //printf("match\n");
             return i;
         }
     }
@@ -193,33 +207,18 @@ int findParticipantOfObserver(int j, int observerMap[]) {
 }
 
 
- int sendPrivate(char *message, char *sender, char usedUsernames[255][11], int sd[], int observerMap[]) {
+ int sendPrivate(char *message, uint16_t messageLen, char *sender, int index, int sd[]) {
     printf("sending private\n");
-    char *realUser, *token;
     char temp[1000];
     char privateMessage[14] = "-           : ";
-    const char delim2 = '\0';
-    int rv;
-    uint16_t messageLen;
 
-    realUser = getPrivateUsername(message);
-    //printf("user = .%s.\n", realUser);
-
-    //search for username, validate
-    rv = checkUsername(usedUsernames, realUser);
-    if (rv >= 0) {
-      printf("Could not find user .%s.\n", realUser);
-      return -1;
-    }
-
-    token = strtok(NULL, &delim2);
-    strncpy(message, token, strlen(token));
-    message[strlen(token)]='\0';
+    //printf("pm = %s\n", message);
 
     //prepend
     int j=strlen(sender)-1;
     for (int i=11; i>0; i--) {
       if (j>=0) {
+        //printf("%s\n", privateMessage);
         privateMessage[i] = sender[j];
       }
       j--;
@@ -227,14 +226,13 @@ int findParticipantOfObserver(int j, int observerMap[]) {
     strncpy(temp, privateMessage, 14);
     strncpy(&temp[14], message, 986);
     strncpy(message, temp, 1000);
-    printf("message = .%s.\n", message);
+    //printf("message = .%s.\n", message);
 
-    int i = observerMap[findParticipantIndex(realUser, usedUsernames)];
-
-    messageLen = strlen(message);
+    //printf("pm recip = sd3[%d], sock = %d\n", index, sd[index]);
     //send to observers
-    send(sd[i], &messageLen, sizeof(messageLen), 0);
-    send(sd[i], message, messageLen, 0);
+    messageLen = messageLen+14;
+    send(sd[index], &messageLen, sizeof(messageLen), 0);
+    send(sd[index], message, messageLen, 0);
 
     return 1;
 
@@ -349,6 +347,7 @@ int main(int argc, char **argv) {
     int rv, sock;
     int activeP[255];
     int activeO[255];
+    uint16_t messageLen;
 
     //uint16_t messageLen;
     int observerMap[255];
@@ -396,8 +395,8 @@ int main(int argc, char **argv) {
                 break;
             }
         }
-        printf("next open p ind = %d\n", i);
-        printf("next open o ind = %d\n", o);
+        //printf("next open p ind = %d\n", i);
+        //printf("next open o ind = %d\n", o);
 
         alen = sizeof(cad);
         sock = resetFDSet(&readfds, sd2, sd3, sd_p, sd_o);
@@ -471,7 +470,7 @@ int main(int argc, char **argv) {
 
         for (int k=0; k<255; k++) {
           if (sd2[k]!=-1) {
-              printf("sd2[%d] = %d\n", k, sd2[k]);
+              //printf("sd2[%d] = %d\n", k, sd2[k]);
           }
         }
         // active participant messages
@@ -552,7 +551,7 @@ int main(int argc, char **argv) {
                     listUsernames(usedUsernames);
                 }
                 else {//active
-                    printf("sd2[%d] set\n", j);
+                    //printf("sd2[%d] set\n", j);
                     rv = fullRead(sd2[j], message, 2);
                     if (rv == -1) {
                         printf("Message too long, closing connection sd2[%d]\n", j);
@@ -563,7 +562,7 @@ int main(int argc, char **argv) {
                         break;
                     }
                     //printf("terminated message: .%s.\n", message);
-                    if (strcmp("quit", message) == 0 || rv==-2) {
+                    if (strcmp("/quit", message) == 0 || rv==-2) {
                         printf("Quit received, closing connection sd2[%d]\n", j);
                         close(sd2[j]);
                         sd2[j] = -1;
@@ -577,7 +576,44 @@ int main(int argc, char **argv) {
 
                     }
                     else if (message[0] == '@') {//private message
-                        rv = sendPrivate(message, usedUsernames[j], usedUsernames, sd3, observerMap);
+                      char recipient[11];
+                      char privateMessage[1000];
+                      //getPrivateUsername(message, recipient);
+                      int iter;
+                      while(message[iter] != ' ') {
+                        recipient[iter-1] = message[iter];
+                        iter++;
+                      }
+                      iter++;
+                      messageLen = 0;
+                      for (int i=0; i<1000; i++) {
+                        if (message[iter] != '\0') {
+                          privateMessage[i] = message[iter++];
+                          messageLen++;
+                        }
+                        else {
+                          break;
+                        }
+                      }
+                      //printf("messageLen = %d\n", messageLen);
+
+                      //printf("user = .%s. message = .%s.\n", recipient, privateMessage);
+
+                      int obs;
+
+                      //printf("recip HERE = .%s.\n", recipient);
+                      rv = findParticipantIndex(recipient, usedUsernames);
+                      if(rv == -1) {
+                        //printf("User could not be found\n");
+                        continue;
+                      }
+                      else {
+                        //printf("recip part id = %d\n", rv);
+                        obs = observerMap[rv];
+                        //printf("pm recip = sd3[%d], sock = %d\n", obs, sd3[obs]);
+                      }
+
+                        rv = sendPrivate(privateMessage, messageLen, usedUsernames[j], obs, sd3);
                         if (rv==1) {//sent
                           printf("pm sent\n");
                         }
@@ -585,7 +621,7 @@ int main(int argc, char **argv) {
                     }
                     else {//public message
                       publicMessage(message, usedUsernames[j]);
-                      printf("publicMessage output: \"%s\"\n", message);
+                      //printf("publicMessage output: \"%s\"\n", message);
                       broadcastToObservers(message, sd3);
                     }
                 }
@@ -600,7 +636,7 @@ int main(int argc, char **argv) {
                   exit(EXIT_FAILURE);
               }
               timeDiff = (endP[j].tv_sec - startP[j].tv_sec) + (endP[j].tv_nsec - startP[j].tv_nsec) / 1E9;
-              printf("sd2[%d] username timeout= %.2lf\n", j, timeDiff);
+              //printf("sd2[%d] username timeout= %.2lf\n", j, timeDiff);
               if(timeDiff > 10) {
                   printf("Client took too long, closing connection sd2[%d]. \n", j);
                   close(sd2[j]);
@@ -617,7 +653,7 @@ int main(int argc, char **argv) {
                   exit(EXIT_FAILURE);
               }
               timeDiff = (endO[j].tv_sec - startO[j].tv_sec) + (endO[j].tv_nsec - startO[j].tv_nsec) / 1E9;
-              printf("sd3[%d] timeout= %.2lf\n", j, timeDiff);
+              //printf("sd3[%d] timeout= %.2lf\n", j, timeDiff);
               if(timeDiff > 10) {
                   printf("Client took too long, closing connection sd3[%d]. \n", j);
                   close(sd3[j]);
