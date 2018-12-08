@@ -132,12 +132,32 @@ int main( int argc, char **argv) {
       close(sd);
       exit(EXIT_FAILURE);
   }
+  //printf("waiting for server response\n");
   if (letter == 'Y') {
     activeState = 0;
     //prompt input
+
+          struct timeval tv;
+          fd_set fds;
+          tv.tv_sec = 10;
+          FD_ZERO(&fds);
+          FD_SET(0, &fds); //STDIN_FILENO is 0
     while (activeState==0) {
-      printf("Enter your username: ");
-      fgets(buf, 255, stdin);
+      printf("Enter a username\n");
+
+      int ret = select(1, &fds, NULL, NULL, &tv);
+      if(ret == 0) {
+
+        printf("Closing connection\n");
+        close(sd);
+
+        exit(EXIT_SUCCESS);
+      }
+      else {
+        fgets(buf, 255, stdin);
+
+      }
+
       printf("\n");
       //validate name, timer
       nameLen = strlen(buf);

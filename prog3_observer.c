@@ -85,6 +85,7 @@ int main( int argc, char **argv) {
   char letter;
   //int rv;
   int activeState;
+  int rv;
 
   fd_set readfds;
   FD_ZERO(&readfds);
@@ -139,6 +140,7 @@ int main( int argc, char **argv) {
   }
 
   // Check if theres room for another connection
+
   recv(sd, &letter, 1, 0);
   //printf("received letter %c\n", letter);
   if (letter == 'Y') {
@@ -170,7 +172,13 @@ int main( int argc, char **argv) {
     }//end inac state
 
     while(1) {//message loop
-      fullRead(sd, buf);
+      rv = fullRead(sd, buf);
+      if(rv == -2) {
+        break;
+      }
+      if(rv==-1) {
+        continue;
+      }
       printf("%s\n", buf);
     } //end message loop
 
