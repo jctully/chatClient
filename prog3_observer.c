@@ -140,6 +140,11 @@ int main( int argc, char **argv) {
     }
   }
 
+  fd_set fds;
+  FD_ZERO(&fds);
+  FD_SET(0, &fds); //STDIN_FILENO is 0
+  FD_SET(sd, &fds);
+
   // Check if theres room for another connection
 
   recv(sd, &letter, 1, 0);
@@ -148,7 +153,7 @@ int main( int argc, char **argv) {
     activeState = 0;
     //prompt input
     while (activeState==0) {
-      printf("Enter your affiliate: ");
+      printf("Enter your affiliate\n");
       fgets(buf, 255, stdin);
       printf("\n");
       //validate name, timer
@@ -171,17 +176,29 @@ int main( int argc, char **argv) {
         printf("Affiliate invalid.\n");
       }
     }//end inac state
-
-    while(1) {//message loop
-      rv = fullRead(sd, buf);
-      if(rv == -2) {
-        break;
+    while(1) {
+      FD_ZERO(&fds);
+      FD_SET(0, &fds); //STDIN_FILENO is 0
+      FD_SET(sd, &fds);
+      select(sd+1, &fds, NULL, NULL, NULL);
+      if (FD_ISSET(0,&fds)) {
+        fgets(buf, 255, stdin);
+        if (strcmp("/quit\n", buf) == 0) {
+          printf("Quit received. ");
+          break;
+        }
       }
-      if(rv==-1) {
-        continue;
+      if (FD_ISSET(sd, &fds)) {
+        rv = fullRead(sd, buf);
+        if(rv == -2) {
+          break;
+        }
+        if(rv==-1) {
+          continue;
+        }
+        printf("%s\n", buf);
       }
-      printf("%s\n", buf);
-    } //end message loop
+    }
 
   } else if (letter=='N') {
     printf("Server full. ");

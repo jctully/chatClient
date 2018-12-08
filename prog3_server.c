@@ -490,6 +490,7 @@ int main(int argc, char **argv) {
                     printf("Participant found!\n");
                     // Check for valid active participant
                     if (observerMap[findParticipantIndex(username, usedUsernames)] == -1) {
+                      //printf("sending obs %c\n", y);
                       send(sd3[j], &y, 1, 0);
                       activeO[j] = 1;
 
@@ -498,6 +499,8 @@ int main(int argc, char **argv) {
                       observerMap[findParticipantIndex(username, usedUsernames)] = j;
                     }
                     else {
+                      //printf("sending obs %c\n", t);
+
                       send(sd3[j], &t, 1, 0);
                     }
 
