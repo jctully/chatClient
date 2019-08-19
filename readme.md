@@ -1,0 +1,2 @@
+This program is a C chat application that supports both public and private messages. This program requires two types of clients - the observer, which only receives messages, and the participant, who sends messages. The server supports up to 255 of each of these types of clients, as well as supporting users joining and quitting chat, making a username, and differentiating between public and private messages.
+
